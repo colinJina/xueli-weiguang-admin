@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-0: #000000;
+  --bg-1: #070707;
+  --bg-2: #101010;
+  --bg-3: #181818;
+  --line-1: #252525;
+  --line-2: #3a3a3a;
+  --text-1: #ffffff;
+  --text-2: #d4d4d4;
+  --text-3: #8f8f8f;
+  --text-4: #5e5e5e;
+  --white-soft: #f7f7f7;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  ::selection {
+    background: rgba(255, 255, 255, 0.18);
+    color: var(--text-1);
+  }
+}
+
+@layer components {
+  .admin-input {
+    @apply h-10 w-full border border-borderStrong bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-disabled focus:border-foreground;
+  }
+
+  .admin-button {
+    @apply inline-flex h-10 items-center justify-center border border-foreground bg-foreground px-4 text-sm font-medium text-background transition hover:bg-muted disabled:cursor-not-allowed disabled:border-disabled disabled:bg-disabled;
+  }
+
+  .admin-secondary-button {
+    @apply inline-flex h-9 items-center justify-center border border-borderStrong bg-transparent px-3 text-sm text-muted transition hover:border-muted hover:text-foreground;
+  }
+}
