@@ -19,7 +19,7 @@ export function DashboardSidebar() {
       <div className="border-b border-border px-4 py-4">
         <p className="text-xs uppercase tracking-[0.28em] text-subtle">Admin</p>
         <Link className="mt-2 block text-lg font-semibold text-foreground" href="/dashboard">
-          雪笺微光
+          雪笠微光
         </Link>
       </div>
 

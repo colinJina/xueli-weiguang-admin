@@ -3,16 +3,17 @@ import type { ReactNode } from "react";
 
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminContext } from "@/lib/admin/auth";
 
 export default async function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, isAdmin } = await getAdminContext();
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (!isAdmin) {
+    redirect("/login?error=not_admin");
   }
 
   return (

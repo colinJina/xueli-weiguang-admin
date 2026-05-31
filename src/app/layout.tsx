@@ -6,8 +6,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "雪笺微光 Admin",
-    template: "%s | 雪笺微光 Admin",
+    default: "雪笠微光 Admin",
+    template: "%s | 雪笠微光 Admin",
   },
   description: "Private operations dashboard for reviewing submissions.",
   icons: {
