@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listDictionaryItems } from "@/lib/review/queries";
 
 export const metadata = {
-  title: "Tags",
+  title: "标签",
 };
 
 type TagsPageProps = {
@@ -19,12 +19,12 @@ export default async function TagsPage({ searchParams }: TagsPageProps) {
 
   return (
     <DictionaryPage
-      description="Approved videos may use up to four tags."
+      description="每个通过审核的视频最多可使用四个标签。"
       error={error}
       items={items}
       kind="tags"
       notice={notice}
-      title="Tags"
+      title="标签"
     />
   );
 }

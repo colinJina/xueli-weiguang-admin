@@ -21,6 +21,7 @@ export type SubmissionRow = {
 export type DictionaryItem = {
   id: string;
   name: string;
+  color_hex?: string | null;
   sort_order?: number;
   created_at: string;
 };

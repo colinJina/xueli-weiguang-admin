@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listDictionaryItems } from "@/lib/review/queries";
 
 export const metadata = {
-  title: "Categories",
+  title: "分类",
 };
 
 type CategoriesPageProps = {
@@ -19,12 +19,12 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
 
   return (
     <DictionaryPage
-      description="One required category is assigned to each approved video."
+      description="每个通过审核的视频必须分配一个分类。"
       error={error}
       items={items}
       kind="categories"
       notice={notice}
-      title="Categories"
+      title="分类"
     />
   );
 }

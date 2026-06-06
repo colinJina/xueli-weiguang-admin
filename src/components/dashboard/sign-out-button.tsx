@@ -19,7 +19,7 @@ export function SignOutButton() {
 
   return (
     <button className="admin-secondary-button" disabled={isSigningOut} onClick={handleSignOut} type="button">
-      {isSigningOut ? "Signing out" : "Sign out"}
+      {isSigningOut ? "正在退出" : "退出登录"}
     </button>
   );
 }

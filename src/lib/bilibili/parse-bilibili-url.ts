@@ -1,5 +1,5 @@
-// Copied from C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\parse-bilibili-url.ts.
-// Keep this helper aligned with the public repo until both apps share a package.
+// 复制自 C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\parse-bilibili-url.ts。
+// 在两个应用共享包之前，保持此辅助函数与公开站点仓库一致。
 
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 
@@ -53,7 +53,7 @@ async function resolveShortLink(inputUrl: URL): Promise<URL> {
   }
 
   throw new BilibiliUrlError(
-    lastError instanceof Error ? lastError.message : "Unable to resolve Bilibili short link.",
+    lastError instanceof Error ? lastError.message : "无法解析 Bilibili 短链接。",
   );
 }
 
@@ -75,11 +75,11 @@ export async function parseBilibiliUrl(
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw new BilibiliUrlError("Provide a valid Bilibili video URL.");
+    throw new BilibiliUrlError("请提供有效的 Bilibili 视频链接。");
   }
 
   if (!/^https?:$/.test(parsed.protocol)) {
-    throw new BilibiliUrlError("Provide a valid Bilibili video URL.");
+    throw new BilibiliUrlError("请提供有效的 Bilibili 视频链接。");
   }
 
   const hostname = parsed.hostname.toLowerCase();
@@ -89,7 +89,7 @@ export async function parseBilibiliUrl(
     const resolvedBvid = extractBvidFromUrl(resolved);
 
     if (!resolvedBvid) {
-      throw new BilibiliUrlError("Short link did not resolve to a valid video.");
+      throw new BilibiliUrlError("短链接未解析到有效视频。");
     }
 
     return {
@@ -102,7 +102,7 @@ export async function parseBilibiliUrl(
     const bvid = extractBvidFromUrl(parsed);
 
     if (!bvid) {
-      throw new BilibiliUrlError("Video URL does not contain a valid BV id.");
+      throw new BilibiliUrlError("视频链接中没有有效的 BV 号。");
     }
 
     return {
@@ -111,5 +111,5 @@ export async function parseBilibiliUrl(
     };
   }
 
-  throw new BilibiliUrlError("Only Bilibili video URLs are supported.");
+  throw new BilibiliUrlError("仅支持 Bilibili 视频链接。");
 }

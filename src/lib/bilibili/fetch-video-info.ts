@@ -1,5 +1,5 @@
-// Copied from C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\fetch-video-info.ts.
-// Keep this helper aligned with the public repo until both apps share a package.
+// 复制自 C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\fetch-video-info.ts。
+// 在两个应用共享包之前，保持此辅助函数与公开站点仓库一致。
 
 const BILIBILI_VIEW_ENDPOINT = "https://api.bilibili.com/x/web-interface/view";
 const FETCH_TIMEOUT_MS = 8_000;
@@ -58,7 +58,7 @@ async function fetchBilibiliJson(
   });
 
   if (!response.ok) {
-    throw new Error(`Bilibili metadata request failed with HTTP ${response.status}`);
+    throw new Error(`Bilibili 元数据请求失败，HTTP 状态码：${response.status}`);
   }
 
   return (await response.json()) as BilibiliViewPayload;
@@ -66,13 +66,13 @@ async function fetchBilibiliJson(
 
 function assertString(value: unknown, fieldName: string): asserts value is string {
   if (typeof value !== "string") {
-    throw new Error(`Invalid Bilibili payload: ${fieldName} is missing.`);
+    throw new Error(`Bilibili 返回数据无效：缺少 ${fieldName}。`);
   }
 }
 
 function assertNumber(value: unknown, fieldName: string): asserts value is number {
   if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new Error(`Invalid Bilibili payload: ${fieldName} is missing.`);
+    throw new Error(`Bilibili 返回数据无效：缺少 ${fieldName}。`);
   }
 }
 
@@ -81,11 +81,11 @@ function assertBilibiliViewPayload(payload: BilibiliViewPayload): asserts payloa
   data: NonNullable<BilibiliViewPayload["data"]>;
 } {
   if (payload.code !== 0) {
-    throw new Error(payload.message ?? payload.msg ?? "Bilibili metadata request failed.");
+    throw new Error(payload.message ?? payload.msg ?? "Bilibili 元数据请求失败。");
   }
 
   if (!payload.data) {
-    throw new Error("Invalid Bilibili payload: data is missing.");
+    throw new Error("Bilibili 返回数据无效：缺少 data。");
   }
 
   assertString(payload.data.title, "title");
@@ -95,11 +95,11 @@ function assertBilibiliViewPayload(payload: BilibiliViewPayload): asserts payloa
   assertNumber(payload.data.pubdate, "pubdate");
 
   if (!payload.data.owner) {
-    throw new Error("Invalid Bilibili payload: owner is missing.");
+    throw new Error("Bilibili 返回数据无效：缺少 owner。");
   }
 
   if (!payload.data.stat) {
-    throw new Error("Invalid Bilibili payload: stat is missing.");
+    throw new Error("Bilibili 返回数据无效：缺少 stat。");
   }
 
   assertString(payload.data.owner.name, "owner.name");
@@ -126,7 +126,7 @@ function mapViewPayloadToVideoInfo(
 
 export async function fetchBilibiliVideoInfo(bvid: string): Promise<BilibiliVideoInfo> {
   if (!BVID_PATTERN.test(bvid)) {
-    throw new Error("Invalid Bilibili video id.");
+    throw new Error("无效的 Bilibili 视频 ID。");
   }
 
   const controller = new AbortController();
@@ -141,7 +141,7 @@ export async function fetchBilibiliVideoInfo(bvid: string): Promise<BilibiliVide
     return mapViewPayloadToVideoInfo(payload.data);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Bilibili metadata request timed out.");
+      throw new Error("Bilibili 元数据请求超时。");
     }
 
     throw error;

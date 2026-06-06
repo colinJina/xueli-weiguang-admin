@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listSubmissions } from "@/lib/review/queries";
 
 export const metadata = {
-  title: "Submissions",
+  title: "投稿",
 };
 
 type SubmissionsPageProps = {
@@ -25,12 +25,12 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-subtle">Submissions</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">Pending review queue</h1>
+          <p className="text-xs uppercase tracking-[0.22em] text-subtle">投稿</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal">待审核队列</h1>
         </div>
         <div className="flex gap-2 text-xs uppercase tracking-[0.16em] text-subtle">
-          <span className="border border-borderStrong px-2 py-1">{pendingCount} Pending</span>
-          <span className="border border-borderStrong px-2 py-1">{submissions.length} Total</span>
+          <span className="border border-borderStrong px-2 py-1">{pendingCount} 待审核</span>
+          <span className="border border-borderStrong px-2 py-1">{submissions.length} 总数</span>
         </div>
       </div>
 
@@ -38,10 +38,10 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
 
       <section className="overflow-hidden border border-border bg-surface">
         <div className="hidden grid-cols-[1.2fr_1fr_130px_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle md:grid">
-          <span>Source URL</span>
-          <span>Created</span>
-          <span>Metadata</span>
-          <span>Status</span>
+          <span>来源链接</span>
+          <span>提交时间</span>
+          <span>元数据</span>
+          <span>状态</span>
         </div>
         {submissions.length ? (
           submissions.map((submission) => (
@@ -53,15 +53,15 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
               <span className="min-w-0 truncate text-foreground">{submission.source_url}</span>
               <span className="text-muted">{new Date(submission.created_at).toLocaleString()}</span>
               <span className="text-muted">
-                {submission.fetched_at ? "Fetched" : submission.fetch_error ? "Failed" : "Pending"}
+                {submission.fetched_at ? "已获取" : submission.fetch_error ? "获取失败" : "待获取"}
               </span>
               <StatusBadge status={submission.status} />
             </Link>
           ))
         ) : (
           <div className="px-4 py-12 text-center">
-            <p className="text-base font-medium text-foreground">No submissions yet.</p>
-            <p className="mt-2 text-sm text-muted">Submitted Bilibili links will appear here.</p>
+            <p className="text-base font-medium text-foreground">暂无投稿。</p>
+            <p className="mt-2 text-sm text-muted">用户提交的 Bilibili 链接会显示在这里。</p>
           </div>
         )}
       </section>

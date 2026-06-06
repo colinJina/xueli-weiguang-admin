@@ -1,9 +1,9 @@
 import type { SubmissionStatus } from "@/lib/review/types";
 
 const labels: Record<SubmissionStatus, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  rejected: "Rejected",
+  pending: "待审核",
+  approved: "已通过",
+  rejected: "已拒绝",
 };
 
 export function StatusBadge({ status }: { status: SubmissionStatus }) {

@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/dashboard/submissions", label: "Submissions" },
-  { href: "/dashboard/videos", label: "Videos" },
-  { href: "/dashboard/categories", label: "Categories" },
-  { href: "/dashboard/tags", label: "Tags" },
-  { href: "/dashboard/tones", label: "Tones" },
+  { href: "/dashboard/submissions", label: "投稿审核" },
+  { href: "/dashboard/videos", label: "已发布视频" },
+  { href: "/dashboard/categories", label: "分类" },
+  { href: "/dashboard/tags", label: "标签" },
+  { href: "/dashboard/tones", label: "色调" },
 ];
 
 export function DashboardSidebar() {
@@ -17,7 +17,7 @@ export function DashboardSidebar() {
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-border bg-background md:min-h-screen md:w-60 md:border-b-0 md:border-r">
       <div className="border-b border-border px-4 py-4">
-        <p className="text-xs uppercase tracking-[0.28em] text-subtle">Admin</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-subtle">管理后台</p>
         <Link className="mt-2 block text-lg font-semibold text-foreground" href="/dashboard">
           雪笠微光
         </Link>
