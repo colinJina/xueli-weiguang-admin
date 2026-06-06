@@ -17,6 +17,8 @@ tsconfig.tsbuildinfo
 
 # Local tooling artifacts
 .playwright-mcp/
+.tmp/
+.vercel/
 
 # Logs
 npm-debug.log*
