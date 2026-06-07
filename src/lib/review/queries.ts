@@ -3,10 +3,18 @@ import { notFound } from "next/navigation";
 import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { getSafeActionMessage } from "@/lib/review/review-utils";
-import type { DictionaryItem, PublishedVideoRow, SubmissionRow } from "@/lib/review/types";
+import type {
+  DictionaryItem,
+  PublishedVideoRow,
+  SubmissionRow,
+  SubmissionStorageProvider,
+} from "@/lib/review/types";
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+const submissionSelectColumns =
+  "id,user_id,platform,storage_provider,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,pending_title,pending_description,file_size,mime_type,source_ref,cover_ref,source_etag,cover_etag,reviewed_by,review_note,created_at,reviewed_at";
 
 const statusOrder: Record<SubmissionRow["status"], number> = {
   pending: 0,
@@ -38,9 +46,7 @@ export function asBilibiliVideoInfo(value: unknown): BilibiliVideoInfo | null {
 export async function listSubmissions(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("submissions")
-    .select(
-      "id,user_id,platform,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,reviewed_by,review_note,created_at,reviewed_at",
-    )
+    .select(submissionSelectColumns)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -56,9 +62,7 @@ export async function listSubmissions(supabase: SupabaseClient) {
 export async function getSubmissionOrNotFound(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("submissions")
-    .select(
-      "id,user_id,platform,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,reviewed_by,review_note,created_at,reviewed_at",
-    )
+    .select(submissionSelectColumns)
     .eq("id", id)
     .maybeSingle();
 
@@ -71,6 +75,24 @@ export async function getSubmissionOrNotFound(supabase: SupabaseClient, id: stri
   }
 
   return data as SubmissionRow;
+}
+
+export function getSubmissionStorageProvider(
+  submission: Pick<SubmissionRow, "platform" | "storage_provider">,
+): SubmissionStorageProvider {
+  return submission.storage_provider === "cos" || submission.platform === "cos"
+    ? "cos"
+    : "bilibili";
+}
+
+export function isBilibiliSubmission(
+  submission: Pick<SubmissionRow, "platform" | "storage_provider">,
+) {
+  return getSubmissionStorageProvider(submission) === "bilibili";
+}
+
+export function isCosSubmission(submission: Pick<SubmissionRow, "platform" | "storage_provider">) {
+  return getSubmissionStorageProvider(submission) === "cos";
 }
 
 export async function listDictionaryItems(supabase: SupabaseClient, table: string) {
@@ -117,6 +139,10 @@ export async function ensureSubmissionMetadata(
   supabase: SupabaseClient,
   submission: SubmissionRow,
 ) {
+  if (!isBilibiliSubmission(submission)) {
+    return { info: null, error: null, fetched: false };
+  }
+
   const cached = asBilibiliVideoInfo(submission.auto_fetched_meta);
 
   if (cached && submission.fetched_at) {

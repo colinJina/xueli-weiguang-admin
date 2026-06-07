@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Notice } from "@/components/dashboard/notice";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { requireAdmin } from "@/lib/admin/auth";
-import { listSubmissions } from "@/lib/review/queries";
+import { isCosSubmission, listSubmissions } from "@/lib/review/queries";
+import type { SubmissionRow } from "@/lib/review/types";
 
 export const metadata = {
   title: "投稿",
@@ -38,7 +39,7 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
 
       <section className="overflow-hidden border border-border bg-surface">
         <div className="hidden grid-cols-[1.2fr_1fr_130px_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle md:grid">
-          <span>来源链接</span>
+          <span>来源</span>
           <span>提交时间</span>
           <span>元数据</span>
           <span>状态</span>
@@ -50,11 +51,18 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
               href={`/dashboard/submissions/${submission.id}`}
               key={submission.id}
             >
-              <span className="min-w-0 truncate text-foreground">{submission.source_url}</span>
-              <span className="text-muted">{new Date(submission.created_at).toLocaleString()}</span>
-              <span className="text-muted">
-                {submission.fetched_at ? "已获取" : submission.fetch_error ? "获取失败" : "待获取"}
+              <span className="min-w-0">
+                <span className="block truncate text-foreground">
+                  {getSubmissionSourceLabel(submission)}
+                </span>
+                {getSubmissionSourceDetail(submission) ? (
+                  <span className="mt-1 block truncate text-xs text-subtle">
+                    {getSubmissionSourceDetail(submission)}
+                  </span>
+                ) : null}
               </span>
+              <span className="text-muted">{new Date(submission.created_at).toLocaleString()}</span>
+              <span className="text-muted">{getMetadataStatusLabel(submission)}</span>
               <StatusBadge status={submission.status} />
             </Link>
           ))
@@ -67,4 +75,28 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
       </section>
     </div>
   );
+}
+
+function getSubmissionSourceLabel(submission: SubmissionRow) {
+  if (isCosSubmission(submission)) {
+    return "原创";
+  }
+
+  return submission.source_url ?? submission.external_id;
+}
+
+function getSubmissionSourceDetail(submission: SubmissionRow) {
+  if (isCosSubmission(submission)) {
+    return submission.source_ref ?? submission.external_id;
+  }
+
+  return null;
+}
+
+function getMetadataStatusLabel(submission: SubmissionRow) {
+  if (isCosSubmission(submission)) {
+    return "本地上传";
+  }
+
+  return submission.fetched_at ? "已获取" : submission.fetch_error ? "获取失败" : "待获取";
 }

@@ -1,17 +1,27 @@
 import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 
 export type SubmissionStatus = "pending" | "approved" | "rejected";
+export type SubmissionStorageProvider = "bilibili" | "cos";
 
 export type SubmissionRow = {
   id: string;
   user_id: string;
-  platform: "bilibili";
-  source_url: string;
+  platform: string;
+  storage_provider: SubmissionStorageProvider | string | null;
+  source_url: string | null;
   external_id: string;
   status: SubmissionStatus;
   auto_fetched_meta: BilibiliVideoInfo | Record<string, never>;
   fetched_at: string | null;
   fetch_error: string | null;
+  pending_title: string | null;
+  pending_description: string | null;
+  file_size: number | string | null;
+  mime_type: string | null;
+  source_ref: string | null;
+  cover_ref: string | null;
+  source_etag: string | null;
+  cover_etag: string | null;
   reviewed_by: string | null;
   review_note: string | null;
   created_at: string;

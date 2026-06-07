@@ -7,8 +7,11 @@ import { requireAdmin } from "@/lib/admin/auth";
 import {
   ensureSubmissionMetadata,
   getSubmissionOrNotFound,
+  isBilibiliSubmission,
+  isCosSubmission,
   listAllDictionaries,
 } from "@/lib/review/queries";
+import type { SubmissionRow } from "@/lib/review/types";
 
 export const metadata = {
   title: "审核投稿",
@@ -39,13 +42,17 @@ export default async function SubmissionDetailPage({
   }
 
   const submission = await getSubmissionOrNotFound(supabase, id);
+  const isBilibili = isBilibiliSubmission(submission);
   const [metadataState, dictionaries] = await Promise.all([
     ensureSubmissionMetadata(supabase, submission),
     listAllDictionaries(supabase),
   ]);
 
   const canApprove =
-    submission.status === "pending" && Boolean(metadataState.info) && dictionaries.categories.length > 0;
+    isBilibili &&
+    submission.status === "pending" &&
+    Boolean(metadataState.info) &&
+    dictionaries.categories.length > 0;
 
   return (
     <div className="space-y-5">
@@ -53,9 +60,9 @@ export default async function SubmissionDetailPage({
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.22em] text-subtle">审核</p>
           <h1 className="mt-2 truncate text-2xl font-semibold tracking-normal">
-            {submission.external_id}
+            {getSubmissionTitle(submission)}
           </h1>
-          <p className="mt-2 truncate text-sm text-muted">{submission.source_url}</p>
+          <p className="mt-2 truncate text-sm text-muted">{getSubmissionSubtitle(submission)}</p>
         </div>
         <StatusBadge status={submission.status} />
       </div>
@@ -67,9 +74,11 @@ export default async function SubmissionDetailPage({
           <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-subtle">元数据</p>
-              <h2 className="mt-2 text-lg font-semibold">Bilibili 详情</h2>
+              <h2 className="mt-2 text-lg font-semibold">
+                {isCosSubmission(submission) ? "待审信息" : "Bilibili 详情"}
+              </h2>
             </div>
-            {metadataState.error ? (
+            {isBilibili && metadataState.error ? (
               <form action={retryMetadataFetch}>
                 <input name="submissionId" type="hidden" value={submission.id} />
                 <button className="admin-secondary-button" type="submit">
@@ -79,7 +88,9 @@ export default async function SubmissionDetailPage({
             ) : null}
           </div>
 
-          {metadataState.info ? (
+          {isCosSubmission(submission) ? (
+            <CosPendingDetails submission={submission} />
+          ) : metadataState.info ? (
             <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -147,7 +158,7 @@ export default async function SubmissionDetailPage({
             </button>
             {!canApprove ? (
               <p className="text-xs text-subtle">
-                通过审核需要投稿处于待审核状态、已缓存元数据，并且至少有一个分类。
+                {getApprovalDisabledMessage(submission, isBilibili)}
               </p>
             ) : null}
           </form>
@@ -174,6 +185,115 @@ export default async function SubmissionDetailPage({
       </section>
     </div>
   );
+}
+
+function getSubmissionTitle(submission: SubmissionRow) {
+  if (isCosSubmission(submission)) {
+    return submission.pending_title ?? submission.source_ref ?? submission.external_id;
+  }
+
+  return submission.external_id;
+}
+
+function getSubmissionSubtitle(submission: SubmissionRow) {
+  if (isCosSubmission(submission)) {
+    return submission.source_ref ? `原创 / 本地上传 / ${submission.source_ref}` : "原创 / 本地上传";
+  }
+
+  return submission.source_url ?? submission.external_id;
+}
+
+function getApprovalDisabledMessage(submission: SubmissionRow, isBilibili: boolean) {
+  if (!isBilibili) {
+    return "本地上传投稿发布流程尚未启用。";
+  }
+
+  if (submission.status !== "pending") {
+    return "只有待审核投稿可以通过。";
+  }
+
+  return "通过审核需要已缓存元数据，并且至少有一个分类。";
+}
+
+function CosPendingDetails({ submission }: { submission: SubmissionRow }) {
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="space-y-3">
+        <DetailField label="标题" value={submission.pending_title} />
+        <DetailField label="简介" value={submission.pending_description} preserveLines />
+      </div>
+
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <DetailField label="来源" value="原创" />
+        <DetailField label="上传方式" value="本地上传" />
+        <DetailField label="文件大小" value={formatFileSize(submission.file_size)} />
+        <DetailField label="MIME" value={submission.mime_type} />
+      </div>
+
+      <div className="grid gap-3 text-sm">
+        <DetailField label="视频对象" value={submission.source_ref} breakAll />
+        <DetailField label="封面对象" value={submission.cover_ref} breakAll />
+        <DetailField label="视频 ETag" value={submission.source_etag} breakAll />
+        <DetailField label="封面 ETag" value={submission.cover_etag} breakAll />
+      </div>
+    </div>
+  );
+}
+
+function DetailField({
+  breakAll = false,
+  label,
+  preserveLines = false,
+  value,
+}: {
+  breakAll?: boolean;
+  label: string;
+  preserveLines?: boolean;
+  value: number | string | null | undefined;
+}) {
+  return (
+    <div className="border border-border bg-panel p-3">
+      <p className="text-xs uppercase tracking-[0.14em] text-subtle">{label}</p>
+      <p
+        className={[
+          "mt-1 text-muted",
+          breakAll ? "break-all" : "",
+          preserveLines ? "whitespace-pre-wrap leading-6" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {formatOptionalValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function formatOptionalValue(value: number | string | null | undefined) {
+  if (value === null || typeof value === "undefined" || value === "") {
+    return "未记录";
+  }
+
+  return value;
+}
+
+function formatFileSize(value: number | string | null) {
+  const bytes = Number(value);
+
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return null;
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function CheckboxGroup({

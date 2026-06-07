@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getSubmissionOrNotFound } from "@/lib/review/queries";
+import { getSubmissionOrNotFound, isBilibiliSubmission } from "@/lib/review/queries";
 import {
   coerceOptionalReviewNote,
   coerceSelectedIds,
@@ -33,6 +33,10 @@ function getStringField(formData: FormData, fieldName: string) {
 
 async function fetchAndPersistMetadata(submission: SubmissionRow) {
   const { supabase } = await requireAdmin();
+
+  if (!isBilibiliSubmission(submission)) {
+    throw new Error("本地上传投稿不需要抓取 Bilibili 元数据。");
+  }
 
   try {
     const info = await fetchBilibiliVideoInfo(submission.external_id);
@@ -88,6 +92,10 @@ export async function approveSubmission(formData: FormData) {
 
     if (submission.status !== "pending") {
       throw new Error("只有待审核投稿可以通过。");
+    }
+
+    if (!isBilibiliSubmission(submission)) {
+      throw new Error("本地上传投稿发布流程尚未启用。");
     }
 
     const categoryId = getStringField(formData, "categoryId");
