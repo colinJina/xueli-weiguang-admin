@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listDictionaryItems } from "@/lib/review/queries";
 
 export const metadata = {
-  title: "语气",
+  title: "色调",
 };
 
 type TonesPageProps = {
@@ -19,12 +19,12 @@ export default async function TonesPage({ searchParams }: TonesPageProps) {
 
   return (
     <DictionaryPage
-      description="每个通过审核的视频最多可使用三个语气。"
+      description="每个通过审核的视频最多可使用三个色调。"
       error={error}
       items={items}
       kind="tones"
       notice={notice}
-      title="语气"
+      title="色调"
     />
   );
 }

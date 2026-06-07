@@ -157,7 +157,8 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
     let error: { message: string } | null;
 
     if (kind === "tones") {
-      const colorHex = normalizeToneColor(formData.get("colorHex"));
+      const manualColorHex = getStringField(formData, "manualColorHex");
+      const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
       ({ error } = await supabase.from("tones").insert({ color_hex: colorHex, name: colorHex }));
     } else {
       ({ error } = await supabase

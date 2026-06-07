@@ -1,5 +1,5 @@
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
 const MAX_ACTION_MESSAGE_LENGTH = 180;
 
 export function buildBilibiliEmbedUrl(bvid: string) {
@@ -37,10 +37,10 @@ export function normalizeToneColor(value: FormDataEntryValue | null) {
   const color = String(value ?? "").trim();
 
   if (!HEX_COLOR_PATTERN.test(color)) {
-    throw new Error("必须选择语气颜色。");
+    throw new Error("必须填写有效的 HEX 颜色。");
   }
 
-  return color.toUpperCase();
+  return (color.startsWith("#") ? color : `#${color}`).toUpperCase();
 }
 
 export function coerceOptionalReviewNote(value: FormDataEntryValue | null) {

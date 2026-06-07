@@ -134,7 +134,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 - 必须选择一个分类。
 - 最多选择 4 个标签。
-- 最多选择 3 个语气。
+- 最多选择 3 个色调。
 - 通过会创建一条 `videos` 记录，并写入 `video_tags` / `video_tones` 关系记录。
 - 拒绝只会把投稿标记为 `rejected`，并在有备注时保存备注。
 

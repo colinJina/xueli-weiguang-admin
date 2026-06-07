@@ -213,7 +213,7 @@ Accept: application/json
 - 实现审核详情页
 - 打开详情时触发延迟的 Bilibili 元数据获取
 - 在 `submissions` 上缓存获取结果或错误
-- 添加分类、标签和语气管理
+- 添加分类、标签和色调管理
 - 通过原子 RPC `public.approve_submission(...)` 发布到 `videos`
 - 拒绝投稿
 

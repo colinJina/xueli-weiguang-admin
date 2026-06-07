@@ -135,7 +135,7 @@ export default async function SubmissionDetailPage({
             </label>
 
             <CheckboxGroup items={dictionaries.tags} label="标签，最多 4 个" name="tagIds" />
-            <ToneColorGroup items={dictionaries.tones} label="语气，最多 3 个" name="toneIds" />
+            <ToneColorGroup items={dictionaries.tones} label="色调，最多 3 个" name="toneIds" />
 
             <label className="block space-y-2">
               <span className="text-xs uppercase tracking-[0.16em] text-subtle">审核备注</span>

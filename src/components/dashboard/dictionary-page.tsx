@@ -36,13 +36,25 @@ export function DictionaryPage({
         </div>
         <form action={addAction} className="flex min-w-0 items-center gap-2">
           {isTonePage ? (
-            <input
-              aria-label="语气颜色"
-              className="h-10 w-14 cursor-pointer border border-borderStrong bg-background p-1 outline-none transition focus:border-foreground"
-              defaultValue="#D4D4D4"
-              name="colorHex"
-              type="color"
-            />
+            <>
+              <input
+                aria-label="色低颜色板"
+                className="h-10 w-14 cursor-pointer border border-borderStrong bg-background p-1 outline-none transition focus:border-foreground"
+                defaultValue="#D4D4D4"
+                name="colorHex"
+                type="color"
+              />
+              <input
+                aria-label="手动 HEX 颜色"
+                autoCapitalize="characters"
+                className="admin-input w-32 font-mono uppercase"
+                inputMode="text"
+                maxLength={7}
+                name="manualColorHex"
+                pattern="#?[0-9A-Fa-f]{6}"
+                placeholder="#D93A32"
+              />
+            </>
           ) : (
             <input className="admin-input w-56" name="name" placeholder="名称" />
           )}
@@ -61,7 +73,7 @@ export function DictionaryPage({
           }`}
         >
           {isTonePage ? <span>颜色</span> : null}
-          <span>{isTonePage ? "语气" : "名称"}</span>
+          <span>{isTonePage ? "色调" : "名称"}</span>
           <span>操作</span>
         </div>
         {items.length ? (
