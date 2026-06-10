@@ -1,13 +1,30 @@
+import { DictionaryPage } from "@/components/dashboard/dictionary-page";
+import { requireAdmin } from "@/lib/admin/auth";
+import { listDictionaryItems } from "@/lib/review/queries";
+
 export const metadata = {
-  title: "Tones",
+  title: "色调",
 };
 
-export default function TonesPage() {
+type TonesPageProps = {
+  searchParams: Promise<{
+    error?: string;
+    notice?: string;
+  }>;
+};
+
+export default async function TonesPage({ searchParams }: TonesPageProps) {
+  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
+  const items = await listDictionaryItems(supabase, "tones");
+
   return (
-    <div className="border border-border bg-surface p-6">
-      <p className="text-xs uppercase tracking-[0.22em] text-subtle">Tones</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-normal">Tones</h1>
-      <p className="mt-3 text-sm text-muted">Dictionary management starts in a later task.</p>
-    </div>
+    <DictionaryPage
+      description="每个通过审核的视频最多可使用三个色调。"
+      error={error}
+      items={items}
+      kind="tones"
+      notice={notice}
+      title="色调"
+    />
   );
 }

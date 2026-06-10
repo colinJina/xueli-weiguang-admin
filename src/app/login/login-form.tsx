@@ -49,7 +49,7 @@ export function LoginForm() {
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label className="text-xs font-medium uppercase tracking-[0.18em] text-subtle" htmlFor="email">
-          Email
+          邮箱
         </label>
         <input
           autoComplete="email"
@@ -64,7 +64,7 @@ export function LoginForm() {
 
       <div className="space-y-2">
         <label className="text-xs font-medium uppercase tracking-[0.18em] text-subtle" htmlFor="password">
-          Password
+          密码
         </label>
         <input
           autoComplete="current-password"
@@ -83,7 +83,7 @@ export function LoginForm() {
       ) : null}
 
       <button className="admin-button w-full" disabled={isSubmitting} type="submit">
-        {isSubmitting ? "Signing in" : "Sign in"}
+        {isSubmitting ? "正在登录" : "登录"}
       </button>
     </form>
   );

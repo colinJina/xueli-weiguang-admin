@@ -1,13 +1,30 @@
+import { DictionaryPage } from "@/components/dashboard/dictionary-page";
+import { requireAdmin } from "@/lib/admin/auth";
+import { listDictionaryItems } from "@/lib/review/queries";
+
 export const metadata = {
-  title: "Tags",
+  title: "标签",
 };
 
-export default function TagsPage() {
+type TagsPageProps = {
+  searchParams: Promise<{
+    error?: string;
+    notice?: string;
+  }>;
+};
+
+export default async function TagsPage({ searchParams }: TagsPageProps) {
+  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
+  const items = await listDictionaryItems(supabase, "tags");
+
   return (
-    <div className="border border-border bg-surface p-6">
-      <p className="text-xs uppercase tracking-[0.22em] text-subtle">Tags</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-normal">Tags</h1>
-      <p className="mt-3 text-sm text-muted">Dictionary management starts in a later task.</p>
-    </div>
+    <DictionaryPage
+      description="每个通过审核的视频最多可使用四个标签。"
+      error={error}
+      items={items}
+      kind="tags"
+      notice={notice}
+      title="标签"
+    />
   );
 }

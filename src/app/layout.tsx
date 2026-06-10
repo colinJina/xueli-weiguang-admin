@@ -6,10 +6,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "雪笺微光 Admin",
-    template: "%s | 雪笺微光 Admin",
+    default: "雪笠微光管理后台",
+    template: "%s | 雪笠微光管理后台",
   },
-  description: "Private operations dashboard for reviewing submissions.",
+  description: "用于审核投稿和管理视频档案的私有运营后台。",
   icons: {
     icon: "/icon.svg",
   },

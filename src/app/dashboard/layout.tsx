@@ -3,16 +3,17 @@ import type { ReactNode } from "react";
 
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminContext } from "@/lib/admin/auth";
 
 export default async function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, isAdmin } = await getAdminContext();
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (!isAdmin) {
+    redirect("/login?error=not_admin");
   }
 
   return (
@@ -21,7 +22,7 @@ export default async function DashboardLayout({ children }: Readonly<{ children:
       <div className="min-w-0 flex-1">
         <header className="flex h-14 items-center justify-between border-b border-border px-4 md:px-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-subtle">Operations</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-subtle">运营管理</p>
             <p className="max-w-[52vw] truncate text-sm text-muted">{user.email}</p>
           </div>
           <SignOutButton />
