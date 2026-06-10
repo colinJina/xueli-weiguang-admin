@@ -2,6 +2,7 @@ import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 export type SubmissionStorageProvider = "bilibili" | "cos";
+export type SubmissionStorageProviderKind = SubmissionStorageProvider | "unsupported";
 
 export type SubmissionRow = {
   id: string;
@@ -39,8 +40,11 @@ export type DictionaryItem = {
 export type PublishedVideoRow = {
   id: string;
   submission_id: string;
-  source_url: string;
-  embed_url: string;
+  platform: string;
+  storage_provider: SubmissionStorageProvider | string | null;
+  source_url: string | null;
+  embed_url: string | null;
+  playback_ref: string | null;
   title: string;
   cover_url: string | null;
   author_name: string | null;

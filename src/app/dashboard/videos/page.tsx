@@ -28,21 +28,7 @@ export default async function VideosPage() {
           <span>发布时间</span>
         </div>
         {videos.length ? (
-          videos.map((video) => (
-            <a
-              className="grid gap-2 border-b border-border px-4 py-3 text-sm last:border-b-0 hover:bg-panel md:grid-cols-[1.3fr_160px_160px] md:items-center"
-              href={video.source_url}
-              key={video.id}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span className="min-w-0 truncate text-foreground">{video.title}</span>
-              <span className="truncate text-muted">{video.author_name ?? "--"}</span>
-              <span className="text-muted">
-                {video.published_at ? new Date(video.published_at).toLocaleDateString() : "--"}
-              </span>
-            </a>
-          ))
+          videos.map((video) => <PublishedVideoListItem key={video.id} video={video} />)
         ) : (
           <div className="px-4 py-12 text-center">
             <p className="text-base font-medium text-foreground">暂无已发布视频。</p>
@@ -51,5 +37,33 @@ export default async function VideosPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function PublishedVideoListItem({
+  video,
+}: {
+  video: Awaited<ReturnType<typeof listPublishedVideos>>[number];
+}) {
+  const className =
+    "grid gap-2 border-b border-border px-4 py-3 text-sm last:border-b-0 hover:bg-panel md:grid-cols-[1.3fr_160px_160px] md:items-center";
+  const content = (
+    <>
+      <span className="min-w-0 truncate text-foreground">{video.title}</span>
+      <span className="truncate text-muted">{video.author_name ?? "--"}</span>
+      <span className="text-muted">
+        {video.published_at ? new Date(video.published_at).toLocaleDateString() : "--"}
+      </span>
+    </>
+  );
+
+  if (!video.source_url) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <a className={className} href={video.source_url} rel="noreferrer" target="_blank">
+      {content}
+    </a>
   );
 }

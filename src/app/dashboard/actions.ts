@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 
 import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getSubmissionOrNotFound, isBilibiliSubmission } from "@/lib/review/queries";
+import {
+  getSubmissionById,
+  getSubmissionOrNotFound,
+  getSubmissionStorageProvider,
+  isBilibiliSubmission,
+} from "@/lib/review/queries";
 import {
   coerceOptionalReviewNote,
   coerceSelectedIds,
@@ -14,6 +19,7 @@ import {
   normalizeToneColor,
 } from "@/lib/review/review-utils";
 import type { SubmissionRow } from "@/lib/review/types";
+import { publishCosSubmission } from "@/lib/storage/cos/publish";
 
 type DictionaryKind = "categories" | "tags" | "tones";
 
@@ -88,14 +94,14 @@ export async function approveSubmission(formData: FormData) {
 
   try {
     const { supabase } = await requireAdmin();
-    const submission = await getSubmissionOrNotFound(supabase, id);
+    const submission = await getSubmissionById(supabase, id);
 
-    if (submission.status !== "pending") {
-      throw new Error("只有待审核投稿可以通过。");
+    if (!submission) {
+      throw new Error("投稿不存在。");
     }
 
-    if (!isBilibiliSubmission(submission)) {
-      throw new Error("本地上传投稿发布流程尚未启用。");
+    if (submission.status !== "pending") {
+      throw new Error("只能审核待处理投稿。");
     }
 
     const categoryId = getStringField(formData, "categoryId");
@@ -107,17 +113,31 @@ export async function approveSubmission(formData: FormData) {
     const tagIds = coerceSelectedIds(formData, "tagIds", 4);
     const toneIds = coerceSelectedIds(formData, "toneIds", 3);
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
+    const storageProvider = getSubmissionStorageProvider(submission);
 
-    const { error } = await supabase.rpc("approve_submission", {
-      p_submission_id: submission.id,
-      p_category_id: categoryId,
-      p_tag_ids: tagIds,
-      p_tone_ids: toneIds,
-      p_review_note: reviewNote,
-    });
+    if (storageProvider === "bilibili") {
+      const { error } = await supabase.rpc("approve_submission", {
+        p_submission_id: submission.id,
+        p_category_id: categoryId,
+        p_tag_ids: tagIds,
+        p_tone_ids: toneIds,
+        p_review_note: reviewNote,
+      });
 
-    if (error) {
-      throw new Error(error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
+    } else if (storageProvider === "cos") {
+      await publishCosSubmission({
+        supabase,
+        submission,
+        categoryId,
+        tagIds,
+        toneIds,
+        reviewNote,
+      });
+    } else {
+      throw new Error("不支持的投稿来源。");
     }
 
     revalidatePath("/dashboard/submissions");

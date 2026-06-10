@@ -43,15 +43,15 @@ export default async function SubmissionDetailPage({
 
   const submission = await getSubmissionOrNotFound(supabase, id);
   const isBilibili = isBilibiliSubmission(submission);
+  const isCos = isCosSubmission(submission);
   const [metadataState, dictionaries] = await Promise.all([
     ensureSubmissionMetadata(supabase, submission),
     listAllDictionaries(supabase),
   ]);
 
   const canApprove =
-    isBilibili &&
     submission.status === "pending" &&
-    Boolean(metadataState.info) &&
+    (isBilibili ? Boolean(metadataState.info) : isCos) &&
     dictionaries.categories.length > 0;
 
   return (
@@ -158,7 +158,7 @@ export default async function SubmissionDetailPage({
             </button>
             {!canApprove ? (
               <p className="text-xs text-subtle">
-                {getApprovalDisabledMessage(submission, isBilibili)}
+                {getApprovalDisabledMessage(submission, isBilibili, isCos)}
               </p>
             ) : null}
           </form>
@@ -203,13 +203,21 @@ function getSubmissionSubtitle(submission: SubmissionRow) {
   return submission.source_url ?? submission.external_id;
 }
 
-function getApprovalDisabledMessage(submission: SubmissionRow, isBilibili: boolean) {
-  if (!isBilibili) {
-    return "本地上传投稿发布流程尚未启用。";
+function getApprovalDisabledMessage(
+  submission: SubmissionRow,
+  isBilibili: boolean,
+  isCos: boolean,
+) {
+  if (!isBilibili && !isCos) {
+    return "不支持的投稿来源。";
   }
 
   if (submission.status !== "pending") {
-    return "只有待审核投稿可以通过。";
+    return "只能审核待处理投稿。";
+  }
+
+  if (isCos) {
+    return "通过审核需要至少有一个分类。";
   }
 
   return "通过审核需要已缓存元数据，并且至少有一个分类。";

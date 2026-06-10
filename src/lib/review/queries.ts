@@ -7,7 +7,7 @@ import type {
   DictionaryItem,
   PublishedVideoRow,
   SubmissionRow,
-  SubmissionStorageProvider,
+  SubmissionStorageProviderKind,
 } from "@/lib/review/types";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -60,6 +60,16 @@ export async function listSubmissions(supabase: SupabaseClient) {
 }
 
 export async function getSubmissionOrNotFound(supabase: SupabaseClient, id: string) {
+  const data = await getSubmissionById(supabase, id);
+
+  if (!data) {
+    notFound();
+  }
+
+  return data;
+}
+
+export async function getSubmissionById(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("submissions")
     .select(submissionSelectColumns)
@@ -70,19 +80,21 @@ export async function getSubmissionOrNotFound(supabase: SupabaseClient, id: stri
     throw new Error(error.message);
   }
 
-  if (!data) {
-    notFound();
-  }
-
-  return data as SubmissionRow;
+  return data ? (data as SubmissionRow) : null;
 }
 
 export function getSubmissionStorageProvider(
   submission: Pick<SubmissionRow, "platform" | "storage_provider">,
-): SubmissionStorageProvider {
-  return submission.storage_provider === "cos" || submission.platform === "cos"
-    ? "cos"
-    : "bilibili";
+): SubmissionStorageProviderKind {
+  if (submission.storage_provider === "cos" || submission.platform === "cos") {
+    return "cos";
+  }
+
+  if (submission.storage_provider === "bilibili" || submission.platform === "bilibili") {
+    return "bilibili";
+  }
+
+  return "unsupported";
 }
 
 export function isBilibiliSubmission(
@@ -124,7 +136,7 @@ export async function listPublishedVideos(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("videos")
     .select(
-      "id,submission_id,source_url,embed_url,title,cover_url,author_name,view_count,like_count,category_id,published_at,created_at",
+      "id,submission_id,platform,storage_provider,source_url,embed_url,playback_ref,title,cover_url,author_name,view_count,like_count,category_id,published_at,created_at",
     )
     .order("created_at", { ascending: false });
 
