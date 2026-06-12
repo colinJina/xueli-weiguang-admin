@@ -170,8 +170,83 @@ export async function rejectSubmission(formData: FormData) {
       throw new Error(error.message);
     }
 
+    const { data: pendingHeroRequest, error: pendingHeroRequestError } = await supabase
+      .from("home_hero_feature_requests")
+      .select("submission_id")
+      .eq("submission_id", id)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (pendingHeroRequestError) {
+      throw new Error(pendingHeroRequestError.message);
+    }
+
+    if (pendingHeroRequest) {
+      const { error: rejectHeroRequestError } = await supabase.rpc(
+        "reject_home_hero_feature_request",
+        {
+          p_submission_id: id,
+        },
+      );
+
+      if (rejectHeroRequestError) {
+        throw new Error(rejectHeroRequestError.message);
+      }
+    }
+
     revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/home-hero");
     redirectWithMessage("/dashboard/submissions", "notice", "投稿已拒绝。");
+  } catch (error) {
+    redirectWithMessage(path, "error", getSafeActionMessage(error));
+  }
+}
+
+export async function applyHomeHeroFeatureRequest(formData: FormData) {
+  const submissionId = getStringField(formData, "submissionId");
+  const path = "/dashboard/home-hero";
+
+  try {
+    if (!submissionId) {
+      throw new Error("缺少投稿 ID。");
+    }
+
+    const { supabase } = await requireAdmin();
+    const { error } = await supabase.rpc("apply_home_hero_feature_request", {
+      p_submission_id: submissionId,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath(path);
+    redirectWithMessage(path, "notice", "已设为首页精选。");
+  } catch (error) {
+    redirectWithMessage(path, "error", getSafeActionMessage(error));
+  }
+}
+
+export async function rejectHomeHeroFeatureRequest(formData: FormData) {
+  const submissionId = getStringField(formData, "submissionId");
+  const path = "/dashboard/home-hero";
+
+  try {
+    if (!submissionId) {
+      throw new Error("缺少投稿 ID。");
+    }
+
+    const { supabase } = await requireAdmin();
+    const { error } = await supabase.rpc("reject_home_hero_feature_request", {
+      p_submission_id: submissionId,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath(path);
+    redirectWithMessage(path, "notice", "已拒绝首页精选申请。");
   } catch (error) {
     redirectWithMessage(path, "error", getSafeActionMessage(error));
   }

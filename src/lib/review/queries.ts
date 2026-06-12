@@ -5,8 +5,11 @@ import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { getSafeActionMessage } from "@/lib/review/review-utils";
 import type {
   DictionaryItem,
+  HomeHeroFeatureRequestRow,
+  HomeHeroFeatureRequestStatus,
   PublishedVideoRow,
   SubmissionRow,
+  SubmissionStatus,
   SubmissionStorageProviderKind,
 } from "@/lib/review/types";
 import type { createClient } from "@/lib/supabase/server";
@@ -20,6 +23,37 @@ const statusOrder: Record<SubmissionRow["status"], number> = {
   pending: 0,
   rejected: 1,
   approved: 2,
+};
+
+const homeHeroRequestStatusOrder: Record<HomeHeroFeatureRequestStatus, number> = {
+  pending: 0,
+  applied: 1,
+  rejected: 2,
+};
+
+type HomeHeroFeatureRequestTableRow = {
+  submission_id: string;
+  status: HomeHeroFeatureRequestStatus;
+  created_at: string;
+};
+
+type HomeHeroSubmissionSummaryRow = {
+  id: string;
+  status: SubmissionStatus;
+  created_at: string;
+  pending_title: string | null;
+  source_url: string | null;
+  source_ref: string | null;
+  external_id: string | null;
+};
+
+type HomeHeroVideoSummaryRow = {
+  id: string;
+  submission_id: string;
+  title: string | null;
+  cover_url: string | null;
+  published_at: string | null;
+  created_at: string;
 };
 
 export function asBilibiliVideoInfo(value: unknown): BilibiliVideoInfo | null {
@@ -145,6 +179,97 @@ export async function listPublishedVideos(supabase: SupabaseClient) {
   }
 
   return (data ?? []) as PublishedVideoRow[];
+}
+
+export async function listHomeHeroFeatureRequests(supabase: SupabaseClient) {
+  const { data: requestData, error: requestError } = await supabase
+    .from("home_hero_feature_requests")
+    .select("submission_id,status,created_at")
+    .order("created_at", { ascending: false });
+
+  if (requestError) {
+    throw new Error(requestError.message);
+  }
+
+  const requests = (requestData ?? []) as HomeHeroFeatureRequestTableRow[];
+  const submissionIds = requests.map((request) => request.submission_id);
+
+  if (submissionIds.length === 0) {
+    return [];
+  }
+
+  const [submissionsResult, videosResult] = await Promise.all([
+    supabase
+      .from("submissions")
+      .select("id,status,created_at,pending_title,source_url,source_ref,external_id")
+      .in("id", submissionIds),
+    supabase
+      .from("videos")
+      .select("id,submission_id,title,cover_url,published_at,created_at")
+      .in("submission_id", submissionIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (submissionsResult.error) {
+    throw new Error(submissionsResult.error.message);
+  }
+
+  if (videosResult.error) {
+    throw new Error(videosResult.error.message);
+  }
+
+  const submissionsById = new Map(
+    ((submissionsResult.data ?? []) as HomeHeroSubmissionSummaryRow[]).map((submission) => [
+      submission.id,
+      submission,
+    ]),
+  );
+  const videosBySubmissionId = new Map<string, HomeHeroVideoSummaryRow>();
+
+  for (const video of (videosResult.data ?? []) as HomeHeroVideoSummaryRow[]) {
+    if (!videosBySubmissionId.has(video.submission_id)) {
+      videosBySubmissionId.set(video.submission_id, video);
+    }
+  }
+
+  return requests
+    .map((request): HomeHeroFeatureRequestRow | null => {
+      const submission = submissionsById.get(request.submission_id);
+
+      if (!submission) {
+        return null;
+      }
+
+      const video = videosBySubmissionId.get(request.submission_id);
+      const title =
+        video?.title ??
+        submission.pending_title ??
+        submission.source_ref ??
+        submission.source_url ??
+        submission.external_id;
+
+      return {
+        cover_url: video?.cover_url ?? null,
+        created_at: request.created_at,
+        published_at: video?.published_at ?? null,
+        request_status: request.status,
+        source_ref: submission.source_ref,
+        source_url: submission.source_url,
+        submission_created_at: submission.created_at,
+        submission_id: request.submission_id,
+        submission_status: submission.status,
+        title,
+        video_id: video?.id ?? null,
+      };
+    })
+    .filter((request): request is HomeHeroFeatureRequestRow => request !== null)
+    .sort((a, b) => {
+      const statusDelta =
+        homeHeroRequestStatusOrder[a.request_status] -
+        homeHeroRequestStatusOrder[b.request_status];
+
+      return statusDelta || Date.parse(b.created_at) - Date.parse(a.created_at);
+    });
 }
 
 export async function ensureSubmissionMetadata(
