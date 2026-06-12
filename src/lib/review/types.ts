@@ -3,6 +3,7 @@ import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 export type SubmissionStorageProvider = "bilibili" | "cos";
 export type SubmissionStorageProviderKind = SubmissionStorageProvider | "unsupported";
+export type HomeHeroFeatureRequestStatus = "pending" | "applied" | "rejected";
 
 export type SubmissionRow = {
   id: string;
@@ -53,4 +54,18 @@ export type PublishedVideoRow = {
   category_id: string;
   published_at: string | null;
   created_at: string;
+};
+
+export type HomeHeroFeatureRequestRow = {
+  submission_id: string;
+  request_status: HomeHeroFeatureRequestStatus;
+  created_at: string;
+  submission_status: SubmissionStatus;
+  submission_created_at: string;
+  title: string | null;
+  source_url: string | null;
+  source_ref: string | null;
+  video_id: string | null;
+  cover_url: string | null;
+  published_at: string | null;
 };
