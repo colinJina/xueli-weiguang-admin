@@ -6,6 +6,10 @@ import { redirect } from "next/navigation";
 import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
+  deletePublishedVideoRecord,
+  type DeletePublishedVideoSupabaseClient,
+} from "@/lib/review/delete-published-video";
+import {
   getSubmissionById,
   getSubmissionOrNotFound,
   getSubmissionStorageProvider,
@@ -247,6 +251,32 @@ export async function rejectHomeHeroFeatureRequest(formData: FormData) {
 
     revalidatePath(path);
     redirectWithMessage(path, "notice", "已拒绝首页精选申请。");
+  } catch (error) {
+    redirectWithMessage(path, "error", getSafeActionMessage(error));
+  }
+}
+
+export async function deletePublishedVideo(formData: FormData) {
+  const id = getStringField(formData, "videoId");
+  const confirmDelete = getStringField(formData, "confirmDelete");
+  const path = "/dashboard/videos";
+
+  try {
+    if (confirmDelete !== "confirmed") {
+      throw new Error("删除前必须勾选确认。");
+    }
+
+    const { supabase } = await requireAdmin();
+    await deletePublishedVideoRecord({
+      supabase: supabase as unknown as DeletePublishedVideoSupabaseClient,
+      videoId: id,
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/videos");
+    revalidatePath("/dashboard/home-hero");
+    revalidatePath("/dashboard/submissions");
+    redirectWithMessage(path, "notice", "视频已删除。");
   } catch (error) {
     redirectWithMessage(path, "error", getSafeActionMessage(error));
   }
