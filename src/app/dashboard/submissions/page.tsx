@@ -3,7 +3,11 @@ import Link from "next/link";
 import { Notice } from "@/components/dashboard/notice";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { requireAdmin } from "@/lib/admin/auth";
-import { isCosSubmission, listSubmissions } from "@/lib/review/queries";
+import {
+  getSubmissionStorageProvider,
+  isCosSubmission,
+  listSubmissions,
+} from "@/lib/review/queries";
 import type { SubmissionRow } from "@/lib/review/types";
 
 export const metadata = {
@@ -69,7 +73,7 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
         ) : (
           <div className="px-4 py-12 text-center">
             <p className="text-base font-medium text-foreground">暂无投稿。</p>
-            <p className="mt-2 text-sm text-muted">用户提交的 Bilibili 链接会显示在这里。</p>
+            <p className="mt-2 text-sm text-muted">用户提交的外链和原创投稿会显示在这里。</p>
           </div>
         )}
       </section>
@@ -90,7 +94,7 @@ function getSubmissionSourceDetail(submission: SubmissionRow) {
     return submission.source_ref ?? submission.external_id;
   }
 
-  return null;
+  return `${getSubmissionPlatformLabel(submission)} / ${submission.external_id}`;
 }
 
 function getMetadataStatusLabel(submission: SubmissionRow) {
@@ -99,4 +103,22 @@ function getMetadataStatusLabel(submission: SubmissionRow) {
   }
 
   return submission.fetched_at ? "已获取" : submission.fetch_error ? "获取失败" : "待获取";
+}
+
+function getSubmissionPlatformLabel(submission: SubmissionRow) {
+  const storageProvider = getSubmissionStorageProvider(submission);
+
+  if (storageProvider === "youtube") {
+    return "YouTube";
+  }
+
+  if (storageProvider === "bilibili") {
+    return "Bilibili";
+  }
+
+  if (storageProvider === "cos") {
+    return "COS 原创";
+  }
+
+  return "未知来源";
 }

@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 
-import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
+import { fetchYouTubeVideoInfo } from "@/lib/youtube/fetch-video-info";
+import {
+  asReviewFetchedMeta,
+  type ReviewFetchedMeta,
+} from "@/lib/review/fetched-meta";
 import { getSafeActionMessage } from "@/lib/review/review-utils";
 import type {
   DictionaryItem,
@@ -15,6 +19,8 @@ import type {
 import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+export { asReviewFetchedMeta };
 
 const submissionSelectColumns =
   "id,user_id,platform,storage_provider,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,pending_title,pending_description,file_size,mime_type,source_ref,cover_ref,source_etag,cover_etag,reviewed_by,review_note,created_at,reviewed_at";
@@ -56,26 +62,7 @@ type HomeHeroVideoSummaryRow = {
   created_at: string;
 };
 
-export function asBilibiliVideoInfo(value: unknown): BilibiliVideoInfo | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const candidate = value as Partial<BilibiliVideoInfo>;
-  const hasRequiredStrings =
-    typeof candidate.title === "string" &&
-    typeof candidate.pic === "string" &&
-    typeof candidate.desc === "string" &&
-    typeof candidate.ownerName === "string" &&
-    typeof candidate.ownerAvatar === "string";
-  const hasRequiredNumbers =
-    typeof candidate.viewCount === "number" &&
-    typeof candidate.likeCount === "number" &&
-    typeof candidate.duration === "number" &&
-    typeof candidate.pubdate === "number";
-
-  return hasRequiredStrings && hasRequiredNumbers ? (candidate as BilibiliVideoInfo) : null;
-}
+export const asBilibiliVideoInfo = asReviewFetchedMeta;
 
 export async function listSubmissions(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -124,6 +111,10 @@ export function getSubmissionStorageProvider(
     return "cos";
   }
 
+  if (submission.storage_provider === "youtube" || submission.platform === "youtube") {
+    return "youtube";
+  }
+
   if (submission.storage_provider === "bilibili" || submission.platform === "bilibili") {
     return "bilibili";
   }
@@ -137,8 +128,37 @@ export function isBilibiliSubmission(
   return getSubmissionStorageProvider(submission) === "bilibili";
 }
 
+export function isYouTubeSubmission(
+  submission: Pick<SubmissionRow, "platform" | "storage_provider">,
+) {
+  return getSubmissionStorageProvider(submission) === "youtube";
+}
+
 export function isCosSubmission(submission: Pick<SubmissionRow, "platform" | "storage_provider">) {
   return getSubmissionStorageProvider(submission) === "cos";
+}
+
+export function isExternalSubmission(
+  submission: Pick<SubmissionRow, "platform" | "storage_provider">,
+) {
+  const storageProvider = getSubmissionStorageProvider(submission);
+  return storageProvider === "bilibili" || storageProvider === "youtube";
+}
+
+export async function fetchExternalSubmissionMetadata(
+  submission: Pick<SubmissionRow, "external_id" | "platform" | "storage_provider">,
+): Promise<ReviewFetchedMeta> {
+  const storageProvider = getSubmissionStorageProvider(submission);
+
+  if (storageProvider === "bilibili") {
+    return fetchBilibiliVideoInfo(submission.external_id);
+  }
+
+  if (storageProvider === "youtube") {
+    return fetchYouTubeVideoInfo(submission.external_id);
+  }
+
+  throw new Error("该投稿来源不需要抓取外部元数据。");
 }
 
 export async function listDictionaryItems(supabase: SupabaseClient, table: string) {
@@ -276,11 +296,11 @@ export async function ensureSubmissionMetadata(
   supabase: SupabaseClient,
   submission: SubmissionRow,
 ) {
-  if (!isBilibiliSubmission(submission)) {
+  if (!isExternalSubmission(submission)) {
     return { info: null, error: null, fetched: false };
   }
 
-  const cached = asBilibiliVideoInfo(submission.auto_fetched_meta);
+  const cached = asReviewFetchedMeta(submission.auto_fetched_meta);
 
   if (cached && submission.fetched_at) {
     return { info: cached, error: null, fetched: false };
@@ -291,7 +311,7 @@ export async function ensureSubmissionMetadata(
   }
 
   try {
-    const info = await fetchBilibiliVideoInfo(submission.external_id);
+    const info = await fetchExternalSubmissionMetadata(submission);
     const { error } = await supabase
       .from("submissions")
       .update({

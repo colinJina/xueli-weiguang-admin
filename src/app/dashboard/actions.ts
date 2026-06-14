@@ -3,17 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { fetchBilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   deletePublishedVideoRecord,
   type DeletePublishedVideoSupabaseClient,
 } from "@/lib/review/delete-published-video";
 import {
+  fetchExternalSubmissionMetadata,
   getSubmissionById,
   getSubmissionOrNotFound,
   getSubmissionStorageProvider,
-  isBilibiliSubmission,
+  isExternalSubmission,
 } from "@/lib/review/queries";
 import {
   coerceOptionalReviewNote,
@@ -44,12 +44,12 @@ function getStringField(formData: FormData, fieldName: string) {
 async function fetchAndPersistMetadata(submission: SubmissionRow) {
   const { supabase } = await requireAdmin();
 
-  if (!isBilibiliSubmission(submission)) {
-    throw new Error("本地上传投稿不需要抓取 Bilibili 元数据。");
+  if (!isExternalSubmission(submission)) {
+    throw new Error("该投稿来源不需要抓取外部元数据。");
   }
 
   try {
-    const info = await fetchBilibiliVideoInfo(submission.external_id);
+    const info = await fetchExternalSubmissionMetadata(submission);
     const { error } = await supabase
       .from("submissions")
       .update({
@@ -119,7 +119,7 @@ export async function approveSubmission(formData: FormData) {
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
     const storageProvider = getSubmissionStorageProvider(submission);
 
-    if (storageProvider === "bilibili") {
+    if (storageProvider === "bilibili" || storageProvider === "youtube") {
       const { error } = await supabase.rpc("approve_submission", {
         p_submission_id: submission.id,
         p_category_id: categoryId,

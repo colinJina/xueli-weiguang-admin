@@ -1,7 +1,7 @@
 import { deletePublishedVideo } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
 import { requireAdmin } from "@/lib/admin/auth";
-import { listPublishedVideos } from "@/lib/review/queries";
+import { getSubmissionStorageProvider, listPublishedVideos } from "@/lib/review/queries";
 
 export const metadata = {
   title: "视频",
@@ -76,7 +76,7 @@ function PublishedVideoListItem({
           <span className="block truncate text-foreground">{video.title}</span>
         )}
         <span className="mt-1 block truncate text-xs text-subtle">
-          {video.storage_provider === "cos" || video.platform === "cos" ? "COS 原创" : "Bilibili"}
+          {getPublishedVideoPlatformLabel(video)}
         </span>
       </span>
       <span className="truncate text-muted">{video.author_name ?? "--"}</span>
@@ -84,11 +84,32 @@ function PublishedVideoListItem({
         {video.published_at ? new Date(video.published_at).toLocaleDateString() : "--"}
       </span>
       <DeleteVideoForm
-        isCos={video.storage_provider === "cos" || video.platform === "cos"}
+        isCos={getSubmissionStorageProvider(video) === "cos"}
         videoId={video.id}
       />
     </div>
   );
+}
+
+function getPublishedVideoPlatformLabel({
+  platform,
+  storage_provider,
+}: Awaited<ReturnType<typeof listPublishedVideos>>[number]) {
+  const storageProvider = getSubmissionStorageProvider({ platform, storage_provider });
+
+  if (storageProvider === "youtube") {
+    return "YouTube";
+  }
+
+  if (storageProvider === "bilibili") {
+    return "Bilibili";
+  }
+
+  if (storageProvider === "cos") {
+    return "COS 原创";
+  }
+
+  return "未知来源";
 }
 
 function DeleteVideoForm({ isCos, videoId }: { isCos: boolean; videoId: string }) {

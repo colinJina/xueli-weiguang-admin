@@ -6,9 +6,10 @@ import { StatusBadge } from "@/components/dashboard/status-badge";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   ensureSubmissionMetadata,
+  getSubmissionStorageProvider,
   getSubmissionOrNotFound,
-  isBilibiliSubmission,
   isCosSubmission,
+  isExternalSubmission,
   listAllDictionaries,
 } from "@/lib/review/queries";
 import type { SubmissionRow } from "@/lib/review/types";
@@ -42,7 +43,7 @@ export default async function SubmissionDetailPage({
   }
 
   const submission = await getSubmissionOrNotFound(supabase, id);
-  const isBilibili = isBilibiliSubmission(submission);
+  const isExternal = isExternalSubmission(submission);
   const isCos = isCosSubmission(submission);
   const [metadataState, dictionaries] = await Promise.all([
     ensureSubmissionMetadata(supabase, submission),
@@ -51,7 +52,7 @@ export default async function SubmissionDetailPage({
 
   const canApprove =
     submission.status === "pending" &&
-    (isBilibili ? Boolean(metadataState.info) : isCos) &&
+    (isExternal ? Boolean(metadataState.info) : isCos) &&
     dictionaries.categories.length > 0;
 
   return (
@@ -75,10 +76,10 @@ export default async function SubmissionDetailPage({
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-subtle">元数据</p>
               <h2 className="mt-2 text-lg font-semibold">
-                {isCosSubmission(submission) ? "待审信息" : "Bilibili 详情"}
+                {isCos ? "待审信息" : `${getSubmissionPlatformLabel(submission)} 详情`}
               </h2>
             </div>
-            {isBilibili && metadataState.error ? (
+            {isExternal && metadataState.error ? (
               <form action={retryMetadataFetch}>
                 <input name="submissionId" type="hidden" value={submission.id} />
                 <button className="admin-secondary-button" type="submit">
@@ -158,7 +159,7 @@ export default async function SubmissionDetailPage({
             </button>
             {!canApprove ? (
               <p className="text-xs text-subtle">
-                {getApprovalDisabledMessage(submission, isBilibili, isCos)}
+                {getApprovalDisabledMessage(submission, isExternal, isCos)}
               </p>
             ) : null}
           </form>
@@ -200,15 +201,17 @@ function getSubmissionSubtitle(submission: SubmissionRow) {
     return submission.source_ref ? `原创 / 本地上传 / ${submission.source_ref}` : "原创 / 本地上传";
   }
 
-  return submission.source_url ?? submission.external_id;
+  return `${getSubmissionPlatformLabel(submission)} / ${
+    submission.source_url ?? submission.external_id
+  }`;
 }
 
 function getApprovalDisabledMessage(
   submission: SubmissionRow,
-  isBilibili: boolean,
+  isExternal: boolean,
   isCos: boolean,
 ) {
-  if (!isBilibili && !isCos) {
+  if (!isExternal && !isCos) {
     return "不支持的投稿来源。";
   }
 
@@ -221,6 +224,24 @@ function getApprovalDisabledMessage(
   }
 
   return "通过审核需要已缓存元数据，并且至少有一个分类。";
+}
+
+function getSubmissionPlatformLabel(submission: SubmissionRow) {
+  const storageProvider = getSubmissionStorageProvider(submission);
+
+  if (storageProvider === "youtube") {
+    return "YouTube";
+  }
+
+  if (storageProvider === "bilibili") {
+    return "Bilibili";
+  }
+
+  if (storageProvider === "cos") {
+    return "COS 原创";
+  }
+
+  return "未知来源";
 }
 
 function CosPendingDetails({ submission }: { submission: SubmissionRow }) {
