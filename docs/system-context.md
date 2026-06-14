@@ -2,7 +2,7 @@
 
 ## 产品边界
 
-`雪笠微光` 是一个黑白风格的视频档案产品。当前公开应用允许用户认证并提交 Bilibili 视频链接。提交的链接不会自动发布。
+`雪笠微光` 是一个黑白风格的视频档案产品。当前公开应用允许用户认证并提交 Bilibili / YouTube 视频链接。提交的链接不会自动发布。
 
 管理后台用于审核这些投稿，并将审核通过的视频发布到公开档案。
 
@@ -29,19 +29,19 @@ C:\Users\31744\Desktop\xueli-weiguang-admin
 ```txt
 公开档案界面
   -> 调用公开应用中的 POST /api/submissions
-  -> 解析 Bilibili URL
+  -> 解析 Bilibili / YouTube URL
   -> 插入 public.submissions 记录
   -> status = pending
 ```
 
-公开投稿路由不会获取 Bilibili 元数据。
+公开投稿路由不会获取 Bilibili / YouTube 元数据，也不会下载、代理或缓存音视频。
 
 ### 管理员审核流程
 
 ```txt
 管理员投稿列表
   -> 打开待审核投稿
-  -> 如未获取则获取 Bilibili 元数据
+  -> 如未获取则按平台获取 Bilibili / YouTube 元数据
   -> 将结果缓存到 public.submissions
   -> 管理员选择分类、标签和色调
   -> 通过 public.approve_submission(...) 审核，或拒绝投稿
@@ -57,7 +57,7 @@ C:\Users\31744\Desktop\xueli-weiguang-admin
   -> 读取 tones 和 video_tones，用于颜色圆点筛选
 ```
 
-公开读取不得调用 Bilibili 元数据端点。
+公开读取不得调用 Bilibili / YouTube 元数据端点。
 
 ## Supabase 项目
 
@@ -88,7 +88,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```txt
 id uuid primary key
 user_id uuid references profiles(id)
-platform text check platform = 'bilibili'
+platform text check platform in ('bilibili', 'youtube', 'cos')
+storage_provider text check storage_provider in ('bilibili', 'youtube', 'cos')
 source_url text
 external_id text
 status text: pending | approved | rejected
@@ -124,7 +125,8 @@ fetch_error is not null and fetched_at is null
 ```txt
 id uuid primary key
 submission_id uuid unique references submissions(id)
-platform text check platform = 'bilibili'
+platform text check platform in ('bilibili', 'youtube', 'cos')
+storage_provider text check storage_provider in ('bilibili', 'youtube', 'cos')
 source_url text
 embed_url text
 title text
@@ -162,12 +164,12 @@ video_tones(video_id, tone_id)
 
 两者都使用组合主键。
 
-## Bilibili 元数据结构
+## 外链元数据结构
 
-辅助函数返回：
+Bilibili 和 YouTube 辅助函数都返回统一审核快照：
 
 ```ts
-type BilibiliVideoInfo = {
+type ReviewFetchedMeta = {
   title: string;
   pic: string;
   desc: string;
@@ -180,7 +182,7 @@ type BilibiliVideoInfo = {
 };
 ```
 
-辅助函数调用：
+Bilibili 辅助函数调用：
 
 ```txt
 https://api.bilibili.com/x/web-interface/view?bvid=...
@@ -195,6 +197,8 @@ Accept: application/json
 ```
 
 超时：通过 `AbortController` 设置为 8 秒。
+
+YouTube 辅助函数使用 `youtubei.js@17.0.1`、`Innertube.create()` 和 `getBasicInfo(videoId)`，不使用 cookie、PO token 或 YouTube 登录态；`likeCount` 缺失时写 `0`，`ownerAvatar` 和 `pubdate` 当前写空值 / `0`。
 
 ## 管理后台职责
 
@@ -211,7 +215,7 @@ Accept: application/json
 
 - 获取真实投稿
 - 实现审核详情页
-- 打开详情时触发延迟的 Bilibili 元数据获取
+- 打开详情时触发延迟的 Bilibili / YouTube 元数据获取
 - 在 `submissions` 上缓存获取结果或错误
 - 添加分类、标签和色调管理
 - 通过原子 RPC `public.approve_submission(...)` 发布到 `videos`

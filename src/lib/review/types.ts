@@ -1,7 +1,7 @@
-import type { BilibiliVideoInfo } from "@/lib/bilibili/fetch-video-info";
+import type { ReviewFetchedMeta } from "@/lib/review/fetched-meta";
 
 export type SubmissionStatus = "pending" | "approved" | "rejected";
-export type SubmissionStorageProvider = "bilibili" | "cos";
+export type SubmissionStorageProvider = "bilibili" | "youtube" | "cos";
 export type SubmissionStorageProviderKind = SubmissionStorageProvider | "unsupported";
 export type HomeHeroFeatureRequestStatus = "pending" | "applied" | "rejected";
 
@@ -13,7 +13,7 @@ export type SubmissionRow = {
   source_url: string | null;
   external_id: string;
   status: SubmissionStatus;
-  auto_fetched_meta: BilibiliVideoInfo | Record<string, never>;
+  auto_fetched_meta: ReviewFetchedMeta | Record<string, never>;
   fetched_at: string | null;
   fetch_error: string | null;
   pending_title: string | null;

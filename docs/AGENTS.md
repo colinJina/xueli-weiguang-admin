@@ -17,7 +17,7 @@ C:\Users\31744\Desktop\xueli-weiguang
 - 管理员登录外壳
 - 受保护的控制台布局
 - 审核 Supabase 中的用户投稿
-- 仅在管理员审核时获取 Bilibili 元数据
+- 仅在管理员审核时获取 Bilibili / YouTube 外链元数据
 - 管理分类、标签和色调
 - 将审核通过的投稿发布到 `videos`
 - 拒绝无效投稿
@@ -29,13 +29,15 @@ C:\Users\31744\Desktop\xueli-weiguang
 - 继续保持为独立的 Next.js 应用，不与公开站点合并。
 - 除非后续明确要求，否则不要迁移到 monorepo。
 - 使用与公开站点相同的 Supabase 项目。
-- 不要在公开读取路径中调用 Bilibili。
-- 不要在公开用户投稿路径中调用 Bilibili。
-- 只有管理员审核详情流程可以触发 Bilibili 元数据获取。
+- 不要在公开读取路径中调用 Bilibili 或 YouTube 元数据服务。
+- 不要在公开用户投稿路径中调用 Bilibili metadata API、YouTube.js 或任何媒体下载逻辑。
+- 只有管理员审核详情流程可以触发 Bilibili / YouTube 元数据获取。
+- 不要下载、代理或缓存 YouTube 音视频；公开视频播放只使用官方 iframe embed。
 - 不要添加 Python。
 - 不要添加 `child_process`。
 - 不要使用第三方 Bilibili 封装库。
 - Bilibili 元数据辅助函数使用原生 `fetch`。
+- YouTube 元数据辅助函数使用 `youtubei.js@17.0.1`，不使用 cookie、PO token 或登录态。
 
 ## 技术栈
 
@@ -107,20 +109,21 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 - `approved`
 - `rejected`
 
-当前 Bilibili 专用约束：
+当前外链与上传来源：
 
-- `submissions.platform = 'bilibili'`
-- `videos.platform = 'bilibili'`
+- `bilibili`
+- `youtube`
+- `cos`
 
 ## 投稿审核规则
 
-公开用户只提交一个 URL。公开 API 会向 `submissions` 插入一条 `pending` 记录。
+公开用户提交 Bilibili / YouTube URL；COS 原创上传沿用已有后台发布流程。公开 API 会向 `submissions` 插入一条 `pending` 记录。
 
 管理后台处理审核：
 
 - 列表优先显示 `pending` 投稿，并按 `created_at desc` 排序。
 - 打开投稿详情时可以触发元数据获取。
-- 如果 `fetched_at is null` 且 `fetch_error is null`，获取 Bilibili 元数据。
+- 如果外链投稿 `fetched_at is null` 且 `fetch_error is null`，按平台获取 Bilibili / YouTube 元数据。
 - 获取成功后更新：
   - `auto_fetched_meta`
   - `fetched_at = now()`
@@ -129,6 +132,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
   - `fetch_error = <safe message>`
   - 保持 `fetched_at = null`
 - 管理员可以重试失败的获取。
+- COS 原创上传不触发外链元数据获取。
 
 通过规则：
 
@@ -138,13 +142,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 - 通过会创建一条 `videos` 记录，并写入 `video_tags` / `video_tones` 关系记录。
 - 拒绝只会把投稿标记为 `rejected`，并在有备注时保存备注。
 
-## Bilibili 辅助函数复用
+## 外链辅助函数复用
 
 公开仓库当前拥有标准辅助函数：
 
 ```txt
 C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\fetch-video-info.ts
 C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\parse-bilibili-url.ts
+C:\Users\31744\Desktop\xueli-weiguang\src\lib\youtube\fetch-video-info.ts
 ```
 
 首次实现管理后台时，将这些辅助函数复制到管理后台仓库，并在文件顶部保留来源说明。不要用不同方式重新实现获取逻辑。
@@ -178,7 +183,9 @@ npm run lint
 - `/api/submissions`
 - Bilibili URL 解析器
 - Bilibili 元数据辅助函数
+- YouTube URL 解析器
+- YouTube 元数据辅助函数
 - `submissions.fetched_at`
 - `submissions.fetch_error`
 
-公开站点的 `/api/submissions` 路由不会调用 Bilibili 元数据端点。
+公开站点的 `/api/submissions` 路由不会调用 Bilibili 或 YouTube 元数据端点。
