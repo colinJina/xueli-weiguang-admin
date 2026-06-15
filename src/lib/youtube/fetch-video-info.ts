@@ -184,6 +184,7 @@ export async function fetchYouTubeVideoInfo(
   try {
     const client = await withTimeout((options.createClient ?? createDefaultClient)(), timeoutMs);
     payload = await withTimeout(client.getBasicInfo(videoId), timeoutMs);
+    console.log("[youtubei.js] getBasicInfo payload", { payload, videoId });
 
     return mapYouTubePayloadToVideoInfo(payload);
   } catch (error) {

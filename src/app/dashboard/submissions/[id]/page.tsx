@@ -49,7 +49,8 @@ export default async function SubmissionDetailPage({
     ensureSubmissionMetadata(supabase, submission),
     listAllDictionaries(supabase),
   ]);
-
+  console.log('metada',metadataState);
+  
   const canApprove =
     submission.status === "pending" &&
     (isExternal ? Boolean(metadataState.info) : isCos) &&
