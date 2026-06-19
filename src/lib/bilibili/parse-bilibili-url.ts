@@ -1,5 +1,4 @@
-// 复制自 C:\Users\31744\Desktop\xueli-weiguang\src\lib\bilibili\parse-bilibili-url.ts。
-// 在两个应用共享包之前，保持此辅助函数与公开站点仓库一致。
+// 两个应用都只接受裸 BV 号和标准 Bilibili 视频链接。
 
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 
@@ -31,35 +30,9 @@ function extractBvidFromUrl(url: URL): string | null {
   return normalizeBvid(segments[segments.length - 1] ?? "");
 }
 
-async function resolveShortLink(inputUrl: URL): Promise<URL> {
-  const methods: Array<"HEAD" | "GET"> = ["HEAD", "GET"];
-  let lastError: unknown;
-
-  for (const method of methods) {
-    try {
-      const response = await fetch(inputUrl, {
-        method,
-        redirect: "follow",
-        headers: {
-          Accept: "text/html,application/xhtml+xml",
-          "User-Agent": "Mozilla/5.0 (compatible; XueliWeiguang/1.0)",
-        },
-      });
-
-      return new URL(response.url);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw new BilibiliUrlError(
-    lastError instanceof Error ? lastError.message : "无法解析 Bilibili 短链接。",
-  );
-}
-
-export async function parseBilibiliUrl(
+export function parseBilibiliUrl(
   input: string,
-): Promise<{ bvid: string; canonicalUrl: string }> {
+): { bvid: string; canonicalUrl: string } {
   const trimmed = input.trim();
   const directBvid = normalizeBvid(trimmed);
 
@@ -83,20 +56,6 @@ export async function parseBilibiliUrl(
   }
 
   const hostname = parsed.hostname.toLowerCase();
-
-  if (hostname === "b23.tv" || hostname === "www.b23.tv") {
-    const resolved = await resolveShortLink(parsed);
-    const resolvedBvid = extractBvidFromUrl(resolved);
-
-    if (!resolvedBvid) {
-      throw new BilibiliUrlError("短链接未解析到有效视频。");
-    }
-
-    return {
-      bvid: resolvedBvid,
-      canonicalUrl: buildCanonicalUrl(resolvedBvid),
-    };
-  }
 
   if (hostname === "bilibili.com" || hostname === "www.bilibili.com") {
     const bvid = extractBvidFromUrl(parsed);
