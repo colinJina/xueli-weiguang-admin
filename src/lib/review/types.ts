@@ -34,7 +34,19 @@ export type DictionaryItem = {
   id: string;
   name: string;
   color_hex?: string | null;
+  family_id?: string | null;
+  family_name?: string | null;
   sort_order?: number;
+  created_at: string;
+};
+
+export type ToneFamilyItem = {
+  id: string;
+  key: string;
+  name: string;
+  color_hex: string;
+  sort_order: number;
+  is_active: boolean;
   created_at: string;
 };
 

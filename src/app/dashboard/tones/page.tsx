@@ -1,6 +1,6 @@
-import { DictionaryPage } from "@/components/dashboard/dictionary-page";
+import { TonesPage as TonesDictionaryPage } from "@/components/dashboard/dictionary-page";
 import { requireAdmin } from "@/lib/admin/auth";
-import { listDictionaryItems } from "@/lib/review/queries";
+import { listToneFamilies, listToneItems } from "@/lib/review/queries";
 
 export const metadata = {
   title: "色调",
@@ -15,16 +15,14 @@ type TonesPageProps = {
 
 export default async function TonesPage({ searchParams }: TonesPageProps) {
   const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const items = await listDictionaryItems(supabase, "tones");
+  const [families, items] = await Promise.all([listToneFamilies(supabase), listToneItems(supabase)]);
 
   return (
-    <DictionaryPage
-      description="每个通过审核的视频最多可使用三个色调。"
+    <TonesDictionaryPage
       error={error}
+      families={families}
       items={items}
-      kind="tones"
       notice={notice}
-      title="色调"
     />
   );
 }

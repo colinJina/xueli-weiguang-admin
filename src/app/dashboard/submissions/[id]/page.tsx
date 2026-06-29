@@ -49,8 +49,6 @@ export default async function SubmissionDetailPage({
     ensureSubmissionMetadata(supabase, submission),
     listAllDictionaries(supabase),
   ]);
-  console.log('metada',metadataState);
-  
   const canApprove =
     submission.status === "pending" &&
     (isExternal ? Boolean(metadataState.info) : isCos) &&
@@ -361,7 +359,7 @@ function ToneColorGroup({
   label,
   name,
 }: {
-  items: Array<{ color_hex?: string | null; id: string; name: string }>;
+  items: Array<{ color_hex?: string | null; family_name?: string | null; id: string; name: string }>;
   label: string;
   name: string;
 }) {
@@ -384,6 +382,11 @@ function ToneColorGroup({
               <span className="max-w-full truncate text-center text-xs text-muted peer-checked:text-foreground">
                 {item.name}
               </span>
+              {item.family_name ? (
+                <span className="max-w-full truncate text-center text-[0.68rem] text-subtle">
+                  {item.family_name}
+                </span>
+              ) : null}
             </label>
           ))
         ) : (

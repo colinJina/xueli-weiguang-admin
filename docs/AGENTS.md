@@ -19,6 +19,7 @@ C:\Users\31744\Desktop\xueli-weiguang
 - 审核 Supabase 中的用户投稿
 - 仅在管理员审核时获取 Bilibili / YouTube 外链元数据
 - 管理分类、标签和色调
+- 管理前台筛选色族，并维护具体色调与色族归属
 - 将审核通过的投稿发布到 `videos`
 - 拒绝无效投稿
 
@@ -100,6 +101,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 - `categories`
 - `tags`
 - `tones`
+- `tone_families`
 - `video_tags`
 - `video_tones`
 
@@ -139,6 +141,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 - 必须选择一个分类。
 - 最多选择 4 个标签。
 - 最多选择 3 个色调。
+- 每个具体色调必须归属一个色族，前台 Archive 按色族筛选，审核发布仍写入具体 `tone_id`。
 - 通过会创建一条 `videos` 记录，并写入 `video_tags` / `video_tones` 关系记录。
 - 拒绝只会把投稿标记为 `rejected`，并在有备注时保存备注。
 

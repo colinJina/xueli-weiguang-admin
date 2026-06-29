@@ -15,6 +15,7 @@ import type {
   SubmissionRow,
   SubmissionStatus,
   SubmissionStorageProviderKind,
+  ToneFamilyItem,
 } from "@/lib/review/types";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -162,7 +163,7 @@ export async function fetchExternalSubmissionMetadata(
 }
 
 export async function listDictionaryItems(supabase: SupabaseClient, table: string) {
-  const orderColumn = table === "categories" ? "sort_order" : "name";
+  const orderColumn = table === "categories" || table === "tone_families" ? "sort_order" : "name";
   const { data, error } = await supabase
     .from(table)
     .select("*")
@@ -176,14 +177,48 @@ export async function listDictionaryItems(supabase: SupabaseClient, table: strin
   return (data ?? []) as DictionaryItem[];
 }
 
+export async function listToneFamilies(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("tone_families")
+    .select("id,key,name,color_hex,sort_order,is_active,created_at")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as ToneFamilyItem[];
+}
+
+export async function listToneItems(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("tones")
+    .select("id,name,color_hex,family_id,created_at")
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const [tones, families] = [(data ?? []) as DictionaryItem[], await listToneFamilies(supabase)];
+  const familyNameById = new Map(families.map((family) => [family.id, family.name]));
+
+  return tones.map((tone) => ({
+    ...tone,
+    family_name: tone.family_id ? (familyNameById.get(tone.family_id) ?? null) : null,
+  }));
+}
+
 export async function listAllDictionaries(supabase: SupabaseClient) {
-  const [categories, tags, tones] = await Promise.all([
+  const [categories, tags, toneFamilies, tones] = await Promise.all([
     listDictionaryItems(supabase, "categories"),
     listDictionaryItems(supabase, "tags"),
-    listDictionaryItems(supabase, "tones"),
+    listToneFamilies(supabase),
+    listToneItems(supabase),
   ]);
 
-  return { categories, tags, tones };
+  return { categories, tags, toneFamilies, tones };
 }
 
 export async function listPublishedVideos(supabase: SupabaseClient) {
