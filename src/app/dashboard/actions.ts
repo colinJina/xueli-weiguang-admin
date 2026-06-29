@@ -20,16 +20,20 @@ import {
   coerceSelectedIds,
   getSafeActionMessage,
   normalizeDictionaryName,
+  normalizeSortOrder,
   normalizeToneColor,
+  normalizeToneFamilyId,
+  normalizeToneFamilyKey,
 } from "@/lib/review/review-utils";
 import type { SubmissionRow } from "@/lib/review/types";
 import { publishCosSubmission } from "@/lib/storage/cos/publish";
 
-type DictionaryKind = "categories" | "tags" | "tones";
+type DictionaryKind = "categories" | "tags" | "tone_families" | "tones";
 
 const dictionaryPaths: Record<DictionaryKind, string> = {
   categories: "/dashboard/categories",
   tags: "/dashboard/tags",
+  tone_families: "/dashboard/tone-families",
   tones: "/dashboard/tones",
 };
 
@@ -290,9 +294,23 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
     let error: { message: string } | null;
 
     if (kind === "tones") {
+      const name = normalizeDictionaryName(formData.get("name"));
       const manualColorHex = getStringField(formData, "manualColorHex");
       const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-      ({ error } = await supabase.from("tones").insert({ color_hex: colorHex, name: colorHex }));
+      const familyId = normalizeToneFamilyId(formData.get("familyId"));
+      ({ error } = await supabase
+        .from("tones")
+        .insert({ color_hex: colorHex, family_id: familyId, name }));
+    } else if (kind === "tone_families") {
+      const manualColorHex = getStringField(formData, "manualColorHex");
+      const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
+      ({ error } = await supabase.from("tone_families").insert({
+        color_hex: colorHex,
+        is_active: true,
+        key: normalizeToneFamilyKey(formData.get("key")),
+        name: normalizeDictionaryName(formData.get("name")),
+        sort_order: normalizeSortOrder(formData.get("sortOrder")),
+      }));
     } else {
       ({ error } = await supabase
         .from(kind)
@@ -305,6 +323,74 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
 
     revalidatePath(path);
     redirectWithMessage(path, "notice", "条目已添加。");
+  } catch (error) {
+    redirectWithMessage(path, "error", getSafeActionMessage(error));
+  }
+}
+
+export async function updateToneItem(formData: FormData) {
+  const path = dictionaryPaths.tones;
+
+  try {
+    const { supabase } = await requireAdmin();
+    const id = getStringField(formData, "id");
+
+    if (!id) {
+      throw new Error("缺少条目 ID。");
+    }
+
+    const manualColorHex = getStringField(formData, "manualColorHex");
+    const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
+    const { error } = await supabase
+      .from("tones")
+      .update({
+        color_hex: colorHex,
+        family_id: normalizeToneFamilyId(formData.get("familyId")),
+        name: normalizeDictionaryName(formData.get("name")),
+      })
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath(path);
+    redirectWithMessage(path, "notice", "色调已更新。");
+  } catch (error) {
+    redirectWithMessage(path, "error", getSafeActionMessage(error));
+  }
+}
+
+export async function updateToneFamilyItem(formData: FormData) {
+  const path = dictionaryPaths.tone_families;
+
+  try {
+    const { supabase } = await requireAdmin();
+    const id = getStringField(formData, "id");
+
+    if (!id) {
+      throw new Error("缺少条目 ID。");
+    }
+
+    const manualColorHex = getStringField(formData, "manualColorHex");
+    const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
+    const { error } = await supabase
+      .from("tone_families")
+      .update({
+        color_hex: colorHex,
+        is_active: formData.get("isActive") === "on",
+        key: normalizeToneFamilyKey(formData.get("key")),
+        name: normalizeDictionaryName(formData.get("name")),
+        sort_order: normalizeSortOrder(formData.get("sortOrder")),
+      })
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath(path);
+    redirectWithMessage(path, "notice", "色族已更新。");
   } catch (error) {
     redirectWithMessage(path, "error", getSafeActionMessage(error));
   }

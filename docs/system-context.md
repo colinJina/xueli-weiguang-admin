@@ -54,7 +54,7 @@ C:\Users\31744\Desktop\xueli-weiguang-admin
 ```txt
 公开档案/详情页
   -> 从 Supabase 读取已发布视频
-  -> 读取 tones 和 video_tones，用于颜色圆点筛选
+  -> 读取 tone_families、tones 和 video_tones，用于色族筛选和具体颜色圆点展示
 ```
 
 公开读取不得调用 Bilibili / YouTube 元数据端点。
@@ -144,15 +144,16 @@ created_at timestamptz
 
 ### dictionaries
 
-`categories`、`tags` 和 `tones` 是由管理员维护的字典。
-`tones.color_hex` 存储管理后台审核界面和公开档案筛选器共同使用的颜色。
+`categories`、`tags`、`tone_families` 和 `tones` 是由管理员维护的字典。
+`tone_families` 存储公开档案筛选器使用的标准色族；`tones.color_hex` 存储具体色调圆点，`tones.family_id` 决定该具体色调参与哪个色族筛选。
 
 当前规则：
 
 - 分类：每个视频一个
 - 标签：每个视频最多 4 个
 - 色调：每个视频最多 3 个
-- 当前阶段支持新增和删除，不支持重命名
+- 色族：每个具体色调必须归属一个色族，公开 Archive 按色族 key 筛选
+- 分类和标签当前支持新增和删除；色族与具体色调支持新增、更新和删除
 - 被已发布视频引用时禁止删除
 
 ### 关系表

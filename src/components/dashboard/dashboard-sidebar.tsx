@@ -9,6 +9,7 @@ const links = [
   { href: "/dashboard/home-hero", label: "首页精选" },
   { href: "/dashboard/categories", label: "分类" },
   { href: "/dashboard/tags", label: "标签" },
+  { href: "/dashboard/tone-families", label: "色族" },
   { href: "/dashboard/tones", label: "色调" },
 ];
 
