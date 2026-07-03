@@ -59,23 +59,46 @@ C:\Users\31744\Desktop\xueli-weiguang-admin
 
 公开读取不得调用 Bilibili / YouTube 元数据端点。
 
-## Supabase 项目
+## 环境与 Supabase 项目
 
-开发项目：
+管理后台与公开站共用同一套数据库 schema，但必须沿用公开站的 dev / prod 资源隔离：
 
 ```txt
-name: xueli-weiguang-bilibili-dev
-project_id: imddodkuwdxmcrqpuesg
+dev:  公开站 .env.local
+      Supabase project_ref: yqrnnfyzmxnqgnewrhas
+
+prod: 公开站 .env.production.local
+      Supabase project_ref: imddodkuwdxmcrqpuesg
 ```
 
-前端安全变量：
+后台本地开发使用 `xueli-weiguang-admin/.env.local`，必须指向 dev Supabase 与 dev COS。后台本地生产回归使用 `xueli-weiguang-admin/.env.production.local`，必须指向 prod Supabase 与 prod COS。
+
+后台 Vercel 项目名为 `xueli-weiguang-admin`，与公开站是两个独立 Vercel 项目。Vercel Dashboard / CLI 中应按作用域配置：
+
+```txt
+Development / Preview -> dev Supabase 与 dev COS
+Production            -> prod Supabase 与 prod COS
+```
+
+公开变量：
 
 ```txt
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-不要把 service-role key 暴露给客户端组件。
+服务端变量：
+
+```txt
+COS_REGION
+COS_BUCKET
+COS_SECRET_ID
+COS_SECRET_KEY
+COS_CDN_DOMAIN
+COS_UPLOAD_MAX_BYTES
+```
+
+不要把 service-role key 暴露给客户端组件。只有未来后台服务端专用路径确实需要绕过用户会话与 RLS 时，才允许在服务端读取 `SUPABASE_SERVICE_ROLE_KEY`。
 
 ## 数据表
 

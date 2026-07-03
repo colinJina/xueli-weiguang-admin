@@ -71,23 +71,43 @@ C:\Users\31744\Desktop\xueli-weiguang
 
 默认字体应使用 Geist。涉及中文文本时，如果字体配置需要显式回退，请提供 `Noto Sans SC` fallback。
 
-## Supabase 项目
+## 环境与 Supabase 项目
 
-开发项目：
+管理后台与公开站使用同一组 dev / prod 资源分流，环境指向以公开站环境文件为准：
 
 ```txt
-xueli-weiguang-bilibili-dev
-project_id: imddodkuwdxmcrqpuesg
+dev:  公开站 .env.local
+      Supabase project_ref: yqrnnfyzmxnqgnewrhas
+
+prod: 公开站 .env.production.local
+      Supabase project_ref: imddodkuwdxmcrqpuesg
 ```
+
+本地后台开发必须让 `xueli-weiguang-admin/.env.local` 指向 dev；本地生产构建或生产回归才使用 `xueli-weiguang-admin/.env.production.local` 指向 prod。
+
+Vercel 侧必须在后台自己的 `xueli-weiguang-admin` 项目中按作用域配置变量：
+
+```txt
+Development / Preview -> dev Supabase 与 dev COS
+Production            -> prod Supabase 与 prod COS
+```
+
+不要复制公开站项目的 `VERCEL_*`、`NX_*`、`TURBO_*` 运行时变量到后台项目；这些变量应由后台 Vercel 项目在对应部署环境中自行注入。
 
 预期环境变量：
 
 ```txt
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
+COS_REGION
+COS_BUCKET
+COS_SECRET_ID
+COS_SECRET_KEY
+COS_CDN_DOMAIN
+COS_UPLOAD_MAX_BYTES
 ```
 
-只有在后续任务明确引入服务端专用边界时，才可以使用 service-role 凭据。绝不要把 service-role key 暴露给客户端组件。
+只有在后续任务明确引入服务端专用边界时，才可以使用 `SUPABASE_SERVICE_ROLE_KEY`。绝不要把 service-role key 暴露给客户端组件或任何 `NEXT_PUBLIC_*` 变量。
 
 ## 核心数据表
 
