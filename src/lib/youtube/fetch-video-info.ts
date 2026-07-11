@@ -25,6 +25,7 @@ type YouTubeBasicInfo = {
     like_count?: number;
     duration?: number;
   };
+  page?: unknown;
 };
 
 type YouTubeOEmbedPayload = {
@@ -32,6 +33,8 @@ type YouTubeOEmbedPayload = {
   thumbnail_url?: unknown;
   title?: unknown;
 };
+
+type YouTubeOEmbedInfo = Pick<YouTubeVideoInfo, "ownerName" | "pic" | "title">;
 
 type YouTubeClient = {
   getBasicInfo(videoId: string): Promise<YouTubeBasicInfo>;
@@ -79,6 +82,34 @@ function getTrimmedString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getPublishedAtEpochSeconds(payload: YouTubeBasicInfo) {
+  const firstPage = Array.isArray(payload.page) ? payload.page[0] : null;
+  const microformat = isRecord(firstPage) ? firstPage.microformat : null;
+
+  if (!isRecord(microformat)) {
+    throw new Error("Invalid YouTube payload: microformat is missing.");
+  }
+
+  const publishedAt =
+    getTrimmedString(microformat.publish_date) ?? getTrimmedString(microformat.upload_date);
+
+  if (!publishedAt) {
+    throw new Error("Invalid YouTube payload: publish_date is missing.");
+  }
+
+  const publishedAtMilliseconds = Date.parse(publishedAt);
+
+  if (!Number.isFinite(publishedAtMilliseconds) || publishedAtMilliseconds <= 0) {
+    throw new Error("Invalid YouTube payload: publish_date is invalid.");
+  }
+
+  return Math.floor(publishedAtMilliseconds / 1000);
+}
+
 function mapYouTubePayloadToVideoInfo(
   payload: YouTubeBasicInfo,
   fallback?: Pick<YouTubeVideoInfo, "ownerName" | "pic" | "title">,
@@ -113,11 +144,11 @@ function mapYouTubePayloadToVideoInfo(
     viewCount,
     likeCount: basicInfo.like_count ?? 0,
     duration: basicInfo.duration ?? 0,
-    pubdate: 0,
+    pubdate: getPublishedAtEpochSeconds(payload),
   };
 }
 
-function mapOEmbedPayloadToVideoInfo(payload: YouTubeOEmbedPayload): YouTubeVideoInfo {
+function mapOEmbedPayloadToVideoInfo(payload: YouTubeOEmbedPayload): YouTubeOEmbedInfo {
   const title = getTrimmedString(payload.title);
   const pic = getTrimmedString(payload.thumbnail_url);
   const ownerName = getTrimmedString(payload.author_name);
@@ -129,13 +160,7 @@ function mapOEmbedPayloadToVideoInfo(payload: YouTubeOEmbedPayload): YouTubeVide
   return {
     title,
     pic,
-    desc: "",
     ownerName,
-    ownerAvatar: "",
-    viewCount: 0,
-    likeCount: 0,
-    duration: 0,
-    pubdate: 0,
   };
 }
 
@@ -184,7 +209,6 @@ export async function fetchYouTubeVideoInfo(
   try {
     const client = await withTimeout((options.createClient ?? createDefaultClient)(), timeoutMs);
     payload = await withTimeout(client.getBasicInfo(videoId), timeoutMs);
-    console.log("[youtubei.js] getBasicInfo payload", { payload, videoId });
 
     return mapYouTubePayloadToVideoInfo(payload);
   } catch (error) {
@@ -194,8 +218,12 @@ export async function fetchYouTubeVideoInfo(
   try {
     const fallback = await fetchYouTubeOEmbedInfo(videoId, options.fetchOEmbed ?? fetch, timeoutMs);
 
-    return payload?.basic_info ? mapYouTubePayloadToVideoInfo(payload, fallback) : fallback;
+    if (payload?.basic_info) {
+      return mapYouTubePayloadToVideoInfo(payload, fallback);
+    }
   } catch {
-    throw primaryError;
+    // Preserve the primary youtubei.js error when oEmbed cannot complete valid metadata.
   }
+
+  throw primaryError;
 }

@@ -10,6 +10,10 @@ export type ReviewFetchedMeta = {
   pubdate: number;
 };
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 export function asReviewFetchedMeta(value: unknown): ReviewFetchedMeta | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -23,10 +27,11 @@ export function asReviewFetchedMeta(value: unknown): ReviewFetchedMeta | null {
     typeof candidate.ownerName === "string" &&
     typeof candidate.ownerAvatar === "string";
   const hasRequiredNumbers =
-    typeof candidate.viewCount === "number" &&
-    typeof candidate.likeCount === "number" &&
-    typeof candidate.duration === "number" &&
-    typeof candidate.pubdate === "number";
+    isFiniteNumber(candidate.viewCount) &&
+    isFiniteNumber(candidate.likeCount) &&
+    isFiniteNumber(candidate.duration) &&
+    isFiniteNumber(candidate.pubdate) &&
+    candidate.pubdate > 0;
 
   return hasRequiredStrings && hasRequiredNumbers ? (candidate as ReviewFetchedMeta) : null;
 }
