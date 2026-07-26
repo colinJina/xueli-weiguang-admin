@@ -39,13 +39,15 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
+  // getSession reads the cookie locally (zero network when the token is valid) and
+  // refreshes an expired token via setAll. Real authorization stays in requireAdmin().
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const { pathname, search } = request.nextUrl;
 
-  if (!user && pathname.startsWith("/dashboard")) {
+  if (!session && pathname.startsWith("/dashboard")) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.search = "";
