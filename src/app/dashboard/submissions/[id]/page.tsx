@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { approveSubmission, rejectSubmission, retryMetadataFetch } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
+import { PendingButton } from "@/components/dashboard/pending-button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
@@ -81,9 +82,9 @@ export default async function SubmissionDetailPage({
             {isExternal && metadataState.error ? (
               <form action={retryMetadataFetch}>
                 <input name="submissionId" type="hidden" value={submission.id} />
-                <button className="admin-secondary-button" type="submit">
+                <PendingButton className="admin-secondary-button" pendingText="重试中…">
                   重试
-                </button>
+                </PendingButton>
               </form>
             ) : null}
           </div>
@@ -153,9 +154,9 @@ export default async function SubmissionDetailPage({
               <textarea className="admin-input h-auto min-h-24 py-2" name="reviewNote" />
             </label>
 
-            <button className="admin-button w-full" disabled={!canApprove} type="submit">
+            <PendingButton className="admin-button w-full" disabled={!canApprove} pendingText="发布中…">
               通过审核
-            </button>
+            </PendingButton>
             {!canApprove ? (
               <p className="text-xs text-subtle">
                 {getApprovalDisabledMessage(submission, isExternal, isCos)}
@@ -173,13 +174,13 @@ export default async function SubmissionDetailPage({
               <span className="text-xs uppercase tracking-[0.16em] text-subtle">原因</span>
               <textarea className="admin-input h-auto min-h-20 py-2" name="reviewNote" />
             </label>
-            <button
+            <PendingButton
               className="admin-secondary-button w-full"
               disabled={submission.status !== "pending"}
-              type="submit"
+              pendingText="拒绝中…"
             >
               拒绝投稿
-            </button>
+            </PendingButton>
           </form>
         </div>
       </section>

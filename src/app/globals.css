@@ -51,4 +51,55 @@
   .admin-secondary-button {
     @apply inline-flex h-9 items-center justify-center border border-borderStrong bg-transparent px-3 text-sm text-muted transition hover:border-muted hover:text-foreground;
   }
+
+  .admin-spinner {
+    @apply inline-block h-4 w-4 shrink-0 rounded-full border border-current border-t-transparent;
+    animation: admin-spin 0.7s linear infinite;
+  }
+
+  .admin-skeleton {
+    @apply relative overflow-hidden bg-panel;
+  }
+
+  .admin-skeleton::after {
+    content: "";
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    animation: admin-shimmer 1.4s ease-in-out infinite;
+  }
+
+  .admin-fade-in-up {
+    animation: admin-fade-in-up 0.22s ease-out both;
+  }
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes admin-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes admin-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

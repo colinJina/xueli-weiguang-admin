@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { Spinner } from "@/components/dashboard/spinner";
 import { createClient } from "@/lib/supabase/client";
 
 function getSafeNextPath(value: string | null) {
@@ -83,7 +84,14 @@ export function LoginForm() {
       ) : null}
 
       <button className="admin-button w-full" disabled={isSubmitting} type="submit">
-        {isSubmitting ? "正在登录" : "登录"}
+        {isSubmitting ? (
+          <span className="inline-flex items-center gap-2">
+            <Spinner />
+            正在登录…
+          </span>
+        ) : (
+          "登录"
+        )}
       </button>
     </form>
   );
