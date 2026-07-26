@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { requireAdmin } from "@/lib/admin/auth";
 import {
@@ -41,13 +41,20 @@ function redirectWithMessage(path: string, key: "error" | "notice", message: str
   redirect(`${path}?${key}=${encodeURIComponent(message)}`);
 }
 
+// 成功分支在 try 内调用 redirect 时会抛出 NEXT_REDIRECT，必须先原样重抛，
+// 避免被当成业务错误再次跳转到 ?error=NEXT_REDIRECT。
+function redirectActionError(error: unknown, path: string): never {
+  unstable_rethrow(error);
+  redirectWithMessage(path, "error", getSafeActionMessage(error));
+}
+
 function getStringField(formData: FormData, fieldName: string) {
   return String(formData.get(fieldName) ?? "").trim();
 }
 
-async function fetchAndPersistMetadata(submission: SubmissionRow) {
-  const { supabase } = await requireAdmin();
+type ActionSupabaseClient = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
 
+async function fetchAndPersistMetadata(supabase: ActionSupabaseClient, submission: SubmissionRow) {
   if (!isExternalSubmission(submission)) {
     throw new Error("该投稿来源不需要抓取外部元数据。");
   }
@@ -88,11 +95,11 @@ export async function retryMetadataFetch(formData: FormData) {
   try {
     const { supabase } = await requireAdmin();
     const submission = await getSubmissionOrNotFound(supabase, id);
-    await fetchAndPersistMetadata(submission);
+    await fetchAndPersistMetadata(supabase, submission);
     revalidatePath(path);
     redirectWithMessage(path, "notice", "元数据已获取。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -152,7 +159,7 @@ export async function approveSubmission(formData: FormData) {
     revalidatePath("/dashboard/videos");
     redirectWithMessage("/dashboard/submissions", "notice", "投稿已通过。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -206,7 +213,206 @@ export async function rejectSubmission(formData: FormData) {
     revalidatePath("/dashboard/home-hero");
     redirectWithMessage("/dashboard/submissions", "notice", "投稿已拒绝。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
+  }
+}
+
+const BATCH_SUBMISSION_LIMIT = 50;
+const BATCH_CONCURRENCY = 3;
+
+function coerceBatchSubmissionIds(formData: FormData) {
+  const ids = Array.from(
+    new Set(
+      formData
+        .getAll("submissionIds")
+        .map((value) => String(value).trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (ids.length === 0) {
+    throw new Error("请先勾选要处理的投稿。");
+  }
+
+  if (ids.length > BATCH_SUBMISSION_LIMIT) {
+    throw new Error(`一次最多批量处理 ${BATCH_SUBMISSION_LIMIT} 条投稿。`);
+  }
+
+  return ids;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= items.length) {
+        return;
+      }
+
+      results[index] = await task(items[index]);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+export async function batchApproveSubmissions(formData: FormData) {
+  const listPath = "/dashboard/submissions";
+
+  try {
+    const { supabase } = await requireAdmin();
+    const ids = coerceBatchSubmissionIds(formData);
+    const categoryId = getStringField(formData, "categoryId");
+
+    if (!categoryId) {
+      throw new Error("批量通过前必须选择分类。");
+    }
+
+    const tagIds = coerceSelectedIds(formData, "tagIds", 4);
+    const toneIds = coerceSelectedIds(formData, "toneIds", 3);
+    const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
+
+    const results = await mapWithConcurrency(ids, BATCH_CONCURRENCY, async (id) => {
+      try {
+        const submission = await getSubmissionById(supabase, id);
+
+        if (!submission) {
+          throw new Error("投稿不存在。");
+        }
+
+        if (submission.status !== "pending") {
+          throw new Error("只能审核待处理投稿。");
+        }
+
+        const storageProvider = getSubmissionStorageProvider(submission);
+
+        if (storageProvider === "bilibili" || storageProvider === "youtube") {
+          if (!submission.fetched_at) {
+            await fetchAndPersistMetadata(supabase, submission);
+          }
+
+          const { error } = await supabase.rpc("approve_submission", {
+            p_submission_id: submission.id,
+            p_category_id: categoryId,
+            p_tag_ids: tagIds,
+            p_tone_ids: toneIds,
+            p_review_note: reviewNote,
+          });
+
+          if (error) {
+            throw new Error(error.message);
+          }
+        } else if (storageProvider === "cos") {
+          await publishCosSubmission({
+            supabase,
+            submission,
+            categoryId,
+            tagIds,
+            toneIds,
+            reviewNote,
+          });
+        } else {
+          throw new Error("不支持的投稿来源。");
+        }
+
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, message: getSafeActionMessage(error) };
+      }
+    });
+
+    const approvedCount = results.filter((result) => result.ok).length;
+    const failures = results.filter(
+      (result): result is { ok: false; message: string } => !result.ok,
+    );
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/videos");
+
+    if (failures.length === 0) {
+      redirectWithMessage(listPath, "notice", `已通过 ${approvedCount} 条投稿。`);
+    }
+
+    const failureDetail = failures
+      .slice(0, 3)
+      .map((failure) => failure.message)
+      .join("；");
+    const message = `已通过 ${approvedCount} 条，${failures.length} 条失败：${failureDetail}`;
+
+    redirectWithMessage(listPath, approvedCount > 0 ? "notice" : "error", message);
+  } catch (error) {
+    redirectActionError(error, listPath);
+  }
+}
+
+export async function batchRejectSubmissions(formData: FormData) {
+  const listPath = "/dashboard/submissions";
+
+  try {
+    const { supabase, user } = await requireAdmin();
+    const ids = coerceBatchSubmissionIds(formData);
+    const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
+
+    const { data: rejectedRows, error } = await supabase
+      .from("submissions")
+      .update({
+        status: "rejected",
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        review_note: reviewNote,
+      })
+      .in("id", ids)
+      .eq("status", "pending")
+      .select("id");
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const rejectedIds = ((rejectedRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+
+    if (rejectedIds.length > 0) {
+      const { data: heroRequests, error: heroRequestError } = await supabase
+        .from("home_hero_feature_requests")
+        .select("submission_id")
+        .in("submission_id", rejectedIds)
+        .eq("status", "pending");
+
+      if (heroRequestError) {
+        throw new Error(heroRequestError.message);
+      }
+
+      for (const request of (heroRequests ?? []) as Array<{ submission_id: string }>) {
+        const { error: rejectHeroError } = await supabase.rpc(
+          "reject_home_hero_feature_request",
+          {
+            p_submission_id: request.submission_id,
+          },
+        );
+
+        if (rejectHeroError) {
+          throw new Error(rejectHeroError.message);
+        }
+      }
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/home-hero");
+    redirectWithMessage(listPath, "notice", `已拒绝 ${rejectedIds.length} 条投稿。`);
+  } catch (error) {
+    redirectActionError(error, listPath);
   }
 }
 
@@ -231,7 +437,7 @@ export async function applyHomeHeroFeatureRequest(formData: FormData) {
     revalidatePath(path);
     redirectWithMessage(path, "notice", "已设为首页精选。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -256,7 +462,7 @@ export async function rejectHomeHeroFeatureRequest(formData: FormData) {
     revalidatePath(path);
     redirectWithMessage(path, "notice", "已拒绝首页精选申请。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -282,7 +488,7 @@ export async function deletePublishedVideo(formData: FormData) {
     revalidatePath("/dashboard/submissions");
     redirectWithMessage(path, "notice", "视频已删除。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -324,7 +530,7 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
     revalidatePath(path);
     redirectWithMessage(path, "notice", "条目已添加。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -357,7 +563,7 @@ export async function updateToneItem(formData: FormData) {
     revalidatePath(path);
     redirectWithMessage(path, "notice", "色调已更新。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -392,7 +598,7 @@ export async function updateToneFamilyItem(formData: FormData) {
     revalidatePath(path);
     redirectWithMessage(path, "notice", "色族已更新。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
 
@@ -418,6 +624,6 @@ export async function deleteDictionaryItem(kind: DictionaryKind, formData: FormD
     revalidatePath(path);
     redirectWithMessage(path, "notice", "条目已删除。");
   } catch (error) {
-    redirectWithMessage(path, "error", getSafeActionMessage(error));
+    redirectActionError(error, path);
   }
 }
