@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { requireAdmin } from "@/lib/admin/auth";
-import { listPublishedVideos, listSubmissions } from "@/lib/review/queries";
+import { countPublishedVideos, countSubmissions } from "@/lib/review/queries";
 
 export const metadata = {
   title: "控制台",
@@ -9,11 +9,11 @@ export const metadata = {
 
 export default async function DashboardPage() {
   const { supabase } = await requireAdmin();
-  const [submissions, videos] = await Promise.all([
-    listSubmissions(supabase),
-    listPublishedVideos(supabase),
+  const [pendingCount, submissionCount, videoCount] = await Promise.all([
+    countSubmissions(supabase, "pending"),
+    countSubmissions(supabase),
+    countPublishedVideos(supabase),
   ]);
-  const pendingCount = submissions.filter((submission) => submission.status === "pending").length;
 
   return (
     <div className="space-y-5">
@@ -29,8 +29,8 @@ export default async function DashboardPage() {
 
       <section className="grid gap-3 md:grid-cols-3">
         <MetricCard label="待审核投稿" value={pendingCount} />
-        <MetricCard label="投稿总数" value={submissions.length} />
-        <MetricCard label="已发布视频" value={videos.length} />
+        <MetricCard label="投稿总数" value={submissionCount} />
+        <MetricCard label="已发布视频" value={videoCount} />
       </section>
     </div>
   );

@@ -1,22 +1,35 @@
 import { deletePublishedVideo } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
+import { Pagination } from "@/components/dashboard/pagination";
+import { PendingButton } from "@/components/dashboard/pending-button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getSubmissionStorageProvider, listPublishedVideos } from "@/lib/review/queries";
+import { getSubmissionStorageProvider, listPublishedVideosPage } from "@/lib/review/queries";
+import type { PublishedVideoRow } from "@/lib/review/types";
 
 export const metadata = {
   title: "视频",
 };
 
+const PAGE_SIZE = 20;
+
 type VideosPageProps = {
   searchParams: Promise<{
     error?: string;
     notice?: string;
+    page?: string;
   }>;
 };
 
 export default async function VideosPage({ searchParams }: VideosPageProps) {
-  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const videos = await listPublishedVideos(supabase);
+  const [{ error, notice, page: pageParam }, { supabase }] = await Promise.all([
+    searchParams,
+    requireAdmin(),
+  ]);
+  const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
+  const { rows: videos, total } = await listPublishedVideosPage(supabase, {
+    page,
+    pageSize: PAGE_SIZE,
+  });
 
   return (
     <div className="space-y-5">
@@ -26,7 +39,7 @@ export default async function VideosPage({ searchParams }: VideosPageProps) {
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">已发布档案</h1>
         </div>
         <span className="border border-borderStrong px-2 py-1 text-xs uppercase tracking-[0.16em] text-subtle">
-          {videos.length} 已发布
+          {total} 已发布
         </span>
       </div>
 
@@ -48,15 +61,18 @@ export default async function VideosPage({ searchParams }: VideosPageProps) {
           </div>
         )}
       </section>
+
+      <Pagination
+        basePath="/dashboard/videos"
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+      />
     </div>
   );
 }
 
-function PublishedVideoListItem({
-  video,
-}: {
-  video: Awaited<ReturnType<typeof listPublishedVideos>>[number];
-}) {
+function PublishedVideoListItem({ video }: { video: PublishedVideoRow }) {
   const className =
     "grid gap-3 border-b border-border px-4 py-4 text-sm last:border-b-0 lg:grid-cols-[1.2fr_150px_140px_220px] lg:items-center";
 
@@ -91,10 +107,7 @@ function PublishedVideoListItem({
   );
 }
 
-function getPublishedVideoPlatformLabel({
-  platform,
-  storage_provider,
-}: Awaited<ReturnType<typeof listPublishedVideos>>[number]) {
+function getPublishedVideoPlatformLabel({ platform, storage_provider }: PublishedVideoRow) {
   const storageProvider = getSubmissionStorageProvider({ platform, storage_provider });
 
   if (storageProvider === "youtube") {
@@ -126,9 +139,9 @@ function DeleteVideoForm({ isCos, videoId }: { isCos: boolean; videoId: string }
         />
         <span>{isCos ? "确认删除发布文件" : "确认下架"}</span>
       </label>
-      <button className="admin-secondary-button w-full border-border text-subtle" type="submit">
+      <PendingButton className="admin-secondary-button w-full border-border text-subtle">
         {isCos ? "删除 COS 视频" : "下架视频"}
-      </button>
+      </PendingButton>
     </form>
   );
 }

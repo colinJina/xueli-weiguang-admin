@@ -12,8 +12,10 @@ import type {
   HomeHeroFeatureRequestRow,
   HomeHeroFeatureRequestStatus,
   PublishedVideoRow,
+  SubmissionListRow,
   SubmissionRow,
   SubmissionStatus,
+  SubmissionStatusFilter,
   SubmissionStorageProviderKind,
   ToneFamilyItem,
 } from "@/lib/review/types";
@@ -26,11 +28,14 @@ export { asReviewFetchedMeta };
 const submissionSelectColumns =
   "id,user_id,platform,storage_provider,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,pending_title,pending_description,file_size,mime_type,source_ref,cover_ref,source_etag,cover_etag,reviewed_by,review_note,created_at,reviewed_at";
 
-const statusOrder: Record<SubmissionRow["status"], number> = {
-  pending: 0,
-  rejected: 1,
-  approved: 2,
-};
+const submissionListColumns =
+  "id,platform,storage_provider,source_url,external_id,source_ref,pending_title,status,fetched_at,fetch_error,created_at";
+
+const publishedVideoColumns =
+  "id,submission_id,platform,storage_provider,source_url,embed_url,playback_ref,title,cover_url,author_name,view_count,like_count,category_id,published_at,created_at";
+
+// PostgREST 对超出总行数的 range 会返回 416（PGRST103），这里视为空页。
+const OUT_OF_RANGE_CODE = "PGRST103";
 
 const homeHeroRequestStatusOrder: Record<HomeHeroFeatureRequestStatus, number> = {
   pending: 0,
@@ -65,20 +70,85 @@ type HomeHeroVideoSummaryRow = {
 
 export const asBilibiliVideoInfo = asReviewFetchedMeta;
 
-export async function listSubmissions(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("submissions")
-    .select(submissionSelectColumns)
-    .order("created_at", { ascending: false });
+export async function listSubmissionsPage(
+  supabase: SupabaseClient,
+  {
+    status = "pending",
+    page = 1,
+    pageSize = 20,
+  }: { status?: SubmissionStatusFilter; page?: number; pageSize?: number } = {},
+) {
+  const from = (page - 1) * pageSize;
+  let query = supabase.from("submissions").select(submissionListColumns, { count: "exact" });
+
+  if (status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  if (error) {
+    if (error.code === OUT_OF_RANGE_CODE) {
+      return { rows: [] as SubmissionListRow[], total: count ?? 0 };
+    }
+
+    throw new Error(error.message);
+  }
+
+  return { rows: (data ?? []) as SubmissionListRow[], total: count ?? 0 };
+}
+
+export async function listPublishedVideosPage(
+  supabase: SupabaseClient,
+  { page = 1, pageSize = 20 }: { page?: number; pageSize?: number } = {},
+) {
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await supabase
+    .from("videos")
+    .select(publishedVideoColumns, { count: "exact" })
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  if (error) {
+    if (error.code === OUT_OF_RANGE_CODE) {
+      return { rows: [] as PublishedVideoRow[], total: count ?? 0 };
+    }
+
+    throw new Error(error.message);
+  }
+
+  return { rows: (data ?? []) as PublishedVideoRow[], total: count ?? 0 };
+}
+
+export async function countSubmissions(supabase: SupabaseClient, status?: SubmissionStatus) {
+  let query = supabase.from("submissions").select("id", { count: "exact", head: true });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { error, count } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as SubmissionRow[]).sort((a, b) => {
-    const statusDelta = statusOrder[a.status] - statusOrder[b.status];
-    return statusDelta || Date.parse(b.created_at) - Date.parse(a.created_at);
-  });
+  return count ?? 0;
+}
+
+export async function countPublishedVideos(supabase: SupabaseClient) {
+  const { error, count } = await supabase
+    .from("videos")
+    .select("id", { count: "exact", head: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
 }
 
 export async function getSubmissionOrNotFound(supabase: SupabaseClient, id: string) {
@@ -191,18 +261,24 @@ export async function listToneFamilies(supabase: SupabaseClient) {
   return (data ?? []) as ToneFamilyItem[];
 }
 
-export async function listToneItems(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("tones")
-    .select("id,name,color_hex,family_id,created_at")
-    .order("name", { ascending: true });
+export async function listToneItems(
+  supabase: SupabaseClient,
+  families?: ToneFamilyItem[] | Promise<ToneFamilyItem[]>,
+) {
+  const [tonesResult, resolvedFamilies] = await Promise.all([
+    supabase
+      .from("tones")
+      .select("id,name,color_hex,family_id,created_at")
+      .order("name", { ascending: true }),
+    families ?? listToneFamilies(supabase),
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (tonesResult.error) {
+    throw new Error(tonesResult.error.message);
   }
 
-  const [tones, families] = [(data ?? []) as DictionaryItem[], await listToneFamilies(supabase)];
-  const familyNameById = new Map(families.map((family) => [family.id, family.name]));
+  const tones = (tonesResult.data ?? []) as DictionaryItem[];
+  const familyNameById = new Map(resolvedFamilies.map((family) => [family.id, family.name]));
 
   return tones.map((tone) => ({
     ...tone,
@@ -211,29 +287,15 @@ export async function listToneItems(supabase: SupabaseClient) {
 }
 
 export async function listAllDictionaries(supabase: SupabaseClient) {
+  const familiesPromise = listToneFamilies(supabase);
   const [categories, tags, toneFamilies, tones] = await Promise.all([
     listDictionaryItems(supabase, "categories"),
     listDictionaryItems(supabase, "tags"),
-    listToneFamilies(supabase),
-    listToneItems(supabase),
+    familiesPromise,
+    listToneItems(supabase, familiesPromise),
   ]);
 
   return { categories, tags, toneFamilies, tones };
-}
-
-export async function listPublishedVideos(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("videos")
-    .select(
-      "id,submission_id,platform,storage_provider,source_url,embed_url,playback_ref,title,cover_url,author_name,view_count,like_count,category_id,published_at,created_at",
-    )
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []) as PublishedVideoRow[];
 }
 
 export async function listHomeHeroFeatureRequests(supabase: SupabaseClient) {

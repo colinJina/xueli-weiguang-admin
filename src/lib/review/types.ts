@@ -30,6 +30,23 @@ export type SubmissionRow = {
   reviewed_at: string | null;
 };
 
+export type SubmissionListRow = Pick<
+  SubmissionRow,
+  | "id"
+  | "platform"
+  | "storage_provider"
+  | "source_url"
+  | "external_id"
+  | "source_ref"
+  | "pending_title"
+  | "status"
+  | "fetched_at"
+  | "fetch_error"
+  | "created_at"
+>;
+
+export type SubmissionStatusFilter = SubmissionStatus | "all";
+
 export type DictionaryItem = {
   id: string;
   name: string;
