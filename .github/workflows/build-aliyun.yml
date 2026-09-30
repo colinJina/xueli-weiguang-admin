@@ -1,0 +1,55 @@
+name: Build Aliyun package
+
+on:
+  push:
+    branches:
+      - codex/aliyun-migration
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aliyun-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Check production configuration
+        run: |
+          node --input-type=module -e "import { assertProductionPublicEnv } from './scripts/aliyun-env.mjs'; assertProductionPublicEnv(process.env);"
+
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run package:aliyun
+
+      - name: Archive deployment package
+        run: |
+          tar -C .tmp/aliyun-package -czf .tmp/xueli-admin.tar.gz .
+          cd .tmp
+          sha256sum xueli-admin.tar.gz > xueli-admin.tar.gz.sha256
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: xueli-admin-${{ github.sha }}
+          path: |
+            .tmp/xueli-admin.tar.gz
+            .tmp/xueli-admin.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7

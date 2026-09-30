@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "prepare:aliyun-env": "node scripts/prepare-aliyun-env.mjs",
+    "package:aliyun": "node scripts/prepare-aliyun-package.mjs",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix --max-warnings=0",
     "test": "vitest run",
