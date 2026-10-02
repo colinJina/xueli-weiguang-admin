@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { requireAdmin } from "@/lib/admin/auth";
-import type { AdminContext } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { countPublishedVideos, countSubmissions } from "@/lib/review/queries";
 
 export const metadata = {
@@ -10,7 +9,6 @@ export const metadata = {
 };
 
 export default async function DashboardPage() {
-  const { supabase } = await requireAdmin();
   return (
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-end">
@@ -24,24 +22,33 @@ export default async function DashboardPage() {
       </div>
 
       <Suspense fallback={<MetricsLoading />}>
-        <DashboardMetrics supabase={supabase} />
+        <DashboardMetrics />
       </Suspense>
+      <section className="admin-card p-4">
+        <h2 className="text-sm font-medium">常用操作</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link className="admin-secondary-button" href="/dashboard/home-hero">处理首页精选</Link>
+          <Link className="admin-secondary-button" href="/dashboard/categories">维护分类</Link>
+          <Link className="admin-secondary-button" href="/dashboard/tags">维护标签</Link>
+          <Link className="admin-secondary-button" href="/dashboard/tones">维护色调</Link>
+        </div>
+      </section>
     </div>
   );
 }
 
-async function DashboardMetrics({ supabase }: Pick<AdminContext, "supabase">) {
-  const [pendingCount, submissionCount, videoCount] = await Promise.all([
+async function DashboardMetrics() {
+  const [pendingCount, submissionCount, videoCount] = await loadAdminPageData((supabase) => Promise.all([
     countSubmissions(supabase, "pending"),
     countSubmissions(supabase),
     countPublishedVideos(supabase),
-  ]);
+  ]));
 
   return (
     <section className="grid gap-3 md:grid-cols-3">
-      <MetricCard label="待审核投稿" value={pendingCount} />
-      <MetricCard label="投稿总数" value={submissionCount} />
-      <MetricCard label="已发布视频" value={videoCount} />
+      <MetricCard href="/dashboard/submissions" label="待审核投稿" value={pendingCount} />
+      <MetricCard href="/dashboard/submissions?status=all" label="投稿总数" value={submissionCount} />
+      <MetricCard href="/dashboard/videos" label="已发布视频" value={videoCount} />
     </section>
   );
 }
@@ -60,12 +67,12 @@ function MetricsLoading() {
   );
 }
 
-function MetricCard({ label, value }: Readonly<{ label: string; value: number }>) {
+function MetricCard({ href, label, value }: Readonly<{ href: string; label: string; value: number }>) {
   return (
-    <div className="admin-card p-4">
+    <Link className="admin-card p-4 transition-colors hover:border-subtle" href={href}>
       <p className="text-xs uppercase tracking-[0.18em] text-subtle">{label}</p>
       <p className="mt-4 text-3xl font-semibold">{value}</p>
-      <p className="mt-2 text-sm text-muted">来自 Supabase 的实时数据。</p>
-    </div>
+      <p className="mt-2 text-sm text-muted">查看列表 →</p>
+    </Link>
   );
 }
