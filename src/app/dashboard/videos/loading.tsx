@@ -9,7 +9,7 @@ export default function VideosLoading() {
         <div className="admin-skeleton h-7 w-24" />
       </div>
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="border-b border-border bg-panel px-4 py-3">
           <div className="admin-skeleton h-3 w-full max-w-md" />
         </div>

@@ -37,7 +37,7 @@ export function Pagination({ basePath, page, pageSize, searchParams = {}, total 
   return (
     <nav
       aria-label="分页"
-      className="flex items-center justify-between gap-3 border border-border bg-surface px-4 py-3 text-sm"
+      className="flex items-center justify-between gap-3 admin-card px-4 py-3 text-sm"
     >
       <PageLink disabled={page <= 1} href={buildHref(page - 1)}>
         上一页
@@ -63,7 +63,7 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="inline-flex h-9 cursor-not-allowed items-center border border-border px-3 text-disabled">
+      <span aria-disabled="true" className="admin-secondary-button pointer-events-none border-border text-disabled">
         {children}
       </span>
     );

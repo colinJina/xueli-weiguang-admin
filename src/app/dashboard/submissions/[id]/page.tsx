@@ -71,7 +71,7 @@ export default async function SubmissionDetailPage({
       <Notice error={error ?? metadataState.error ?? undefined} notice={notice} />
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="border border-border bg-surface p-4">
+        <div className="admin-card p-4">
           <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-subtle">元数据</p>
@@ -127,7 +127,7 @@ export default async function SubmissionDetailPage({
         </div>
 
         <div className="space-y-4">
-          <form action={approveSubmission} className="space-y-4 border border-border bg-surface p-4">
+          <form action={approveSubmission} className="space-y-4 admin-card p-4">
             <input name="submissionId" type="hidden" value={submission.id} />
             <div className="border-b border-border pb-3">
               <p className="text-xs uppercase tracking-[0.18em] text-subtle">通过</p>
@@ -164,7 +164,7 @@ export default async function SubmissionDetailPage({
             ) : null}
           </form>
 
-          <form action={rejectSubmission} className="space-y-4 border border-border bg-surface p-4">
+          <form action={rejectSubmission} className="space-y-4 admin-card p-4">
             <input name="submissionId" type="hidden" value={submission.id} />
             <div className="border-b border-border pb-3">
               <p className="text-xs uppercase tracking-[0.18em] text-subtle">拒绝</p>

@@ -9,7 +9,7 @@ export function Notice({ error, notice }: NoticeProps) {
   }
 
   return (
-    <div className="border border-borderStrong bg-panel px-3 py-2 text-sm text-muted">
+    <div className="admin-alert" role={error ? "alert" : "status"}>
       {error ?? notice}
     </div>
   );

@@ -48,7 +48,7 @@ export function DictionaryPage({
 
       <Notice error={error} notice={notice} />
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div
           className="grid grid-cols-[1fr_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle"
         >
@@ -98,7 +98,7 @@ export function ToneFamiliesPage({ error, families, notice }: ToneFamiliesPagePr
 
       <Notice error={error} notice={notice} />
 
-      <form action={addAction} className="grid gap-2 border border-border bg-surface p-4 md:grid-cols-[1fr_1fr_88px_120px_80px]">
+      <form action={addAction} className="grid gap-2 admin-card p-4 md:grid-cols-[1fr_1fr_88px_120px_80px]">
         <input className="admin-input" name="name" placeholder="名称，例如 蓝" />
         <input className="admin-input font-mono" name="key" placeholder="key，例如 blue" />
         <input className="admin-input" name="sortOrder" placeholder="排序" type="number" />
@@ -108,7 +108,7 @@ export function ToneFamiliesPage({ error, families, notice }: ToneFamiliesPagePr
         </button>
       </form>
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="grid grid-cols-[72px_1fr_1fr_80px_88px_160px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle">
           <span>颜色</span>
           <span>名称</span>
@@ -184,7 +184,7 @@ export function TonesPage({ error, families, items, notice }: TonesPageProps) {
 
       <Notice error={error} notice={notice} />
 
-      <form action={addAction} className="grid gap-2 border border-border bg-surface p-4 md:grid-cols-[1fr_1fr_120px_80px]">
+      <form action={addAction} className="grid gap-2 admin-card p-4 md:grid-cols-[1fr_1fr_120px_80px]">
         <input className="admin-input" name="name" placeholder="名称，例如 雾蓝" />
         <FamilySelect families={families} />
         <ColorInputs defaultColor="#D4D4D4" />
@@ -193,7 +193,7 @@ export function TonesPage({ error, families, items, notice }: TonesPageProps) {
         </button>
       </form>
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="grid grid-cols-[72px_1fr_1fr_1fr_160px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle">
           <span>颜色</span>
           <span>名称</span>

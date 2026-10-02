@@ -20,8 +20,19 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-geist-sans)", "Noto Sans SC", "sans-serif"],
       },
+      borderRadius: {
+        control: "var(--radius-control)",
+        card: "var(--radius-card)",
+        badge: "var(--radius-badge)",
+      },
+      spacing: {
+        "control-sm": "var(--control-height-sm)",
+        control: "var(--control-height)",
+        "control-lg": "var(--control-height-lg)",
+      },
       maxWidth: {
         content: "1440px",
+        auth: "var(--auth-width)",
       },
     },
   },
