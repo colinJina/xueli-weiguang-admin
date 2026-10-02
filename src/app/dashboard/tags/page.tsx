@@ -1,5 +1,5 @@
 import { DictionaryPage } from "@/components/dashboard/dictionary-page";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { listDictionaryItems } from "@/lib/review/queries";
 
 export const metadata = {
@@ -14,8 +14,10 @@ type TagsPageProps = {
 };
 
 export default async function TagsPage({ searchParams }: TagsPageProps) {
-  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const items = await listDictionaryItems(supabase, "tags");
+  const [{ error, notice }, items] = await Promise.all([
+    searchParams,
+    loadAdminPageData((supabase) => listDictionaryItems(supabase, "tags")),
+  ]);
 
   return (
     <DictionaryPage
