@@ -1,6 +1,7 @@
 import { DictionaryPage } from "@/components/dashboard/dictionary-page";
 import { loadAdminPageData } from "@/lib/admin/auth";
 import { listDictionaryItems } from "@/lib/review/queries";
+import { normalizeSearch } from "@/lib/review/menu-navigation";
 
 export const metadata = {
   title: "标签",
@@ -10,11 +11,12 @@ type TagsPageProps = {
   searchParams: Promise<{
     error?: string;
     notice?: string;
+    q?: string;
   }>;
 };
 
 export default async function TagsPage({ searchParams }: TagsPageProps) {
-  const [{ error, notice }, items] = await Promise.all([
+  const [{ error, notice, q }, items] = await Promise.all([
     searchParams,
     loadAdminPageData((supabase) => listDictionaryItems(supabase, "tags")),
   ]);
@@ -26,6 +28,7 @@ export default async function TagsPage({ searchParams }: TagsPageProps) {
       items={items}
       kind="tags"
       notice={notice}
+      query={normalizeSearch(q)}
       title="标签"
     />
   );
