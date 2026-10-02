@@ -4,7 +4,8 @@ import { approveSubmission, rejectSubmission, retryMetadataFetch } from "@/app/d
 import { Notice } from "@/components/dashboard/notice";
 import { PendingButton } from "@/components/dashboard/pending-button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import { requireAdmin } from "@/lib/admin/auth";
+import { SubmissionCover } from "@/components/dashboard/submission-cover";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import {
   ensureSubmissionMetadata,
   getSubmissionStorageProvider,
@@ -33,23 +34,26 @@ export default async function SubmissionDetailPage({
   params,
   searchParams,
 }: SubmissionDetailPageProps) {
-  const [{ id }, { error, notice }, { supabase }] = await Promise.all([
+  const [{ id }, { error, notice }] = await Promise.all([
     params,
     searchParams,
-    requireAdmin(),
   ]);
 
   if (!id) {
     notFound();
   }
 
-  const submission = await getSubmissionOrNotFound(supabase, id);
+  const { submission, dictionaries, supabase } = await loadAdminPageData(async (supabase) => {
+    const [submission, dictionaries] = await Promise.all([
+      getSubmissionOrNotFound(supabase, id),
+      listAllDictionaries(supabase),
+    ]);
+    return { submission, dictionaries, supabase };
+  });
   const isExternal = isExternalSubmission(submission);
   const isCos = isCosSubmission(submission);
-  const [metadataState, dictionaries] = await Promise.all([
-    ensureSubmissionMetadata(supabase, submission),
-    listAllDictionaries(supabase),
-  ]);
+  // Metadata may write to the database, so only start it after admin authorization.
+  const metadataState = await ensureSubmissionMetadata(supabase, submission);
   const canApprove =
     submission.status === "pending" &&
     (isExternal ? Boolean(metadataState.info) : isCos) &&
@@ -93,11 +97,9 @@ export default async function SubmissionDetailPage({
             <CosPendingDetails submission={submission} />
           ) : metadataState.info ? (
             <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt=""
-                className="aspect-video w-full border border-border object-cover"
+              <SubmissionCover
                 src={metadataState.info.pic}
+                title={metadataState.info.title}
               />
               <div className="min-w-0 space-y-3">
                 <div>

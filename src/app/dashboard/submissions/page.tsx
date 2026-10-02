@@ -1,7 +1,8 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Notice } from "@/components/dashboard/notice";
 import { Pagination } from "@/components/dashboard/pagination";
+import { SubmissionStatusNavigation } from "@/components/dashboard/submission-status-navigation";
 import {
   SubmissionsBatchList,
   type SubmissionBatchListItem,
@@ -10,23 +11,16 @@ import { loadAdminPageData } from "@/lib/admin/auth";
 import {
   getSubmissionStorageProvider,
   isCosSubmission,
-  listAllDictionaries,
   listSubmissionsPage,
 } from "@/lib/review/queries";
-import type { SubmissionListRow, SubmissionStatusFilter } from "@/lib/review/types";
+import { buildSubmissionsHref, coerceSubmissionPage, coerceSubmissionStatus, submissionStatusTabs } from "@/lib/review/submission-navigation";
+import type { SubmissionListRow } from "@/lib/review/types";
 
 export const metadata = {
   title: "投稿",
 };
 
 const PAGE_SIZE = 20;
-
-const statusTabs: Array<{ label: string; value: SubmissionStatusFilter }> = [
-  { label: "待审核", value: "pending" },
-  { label: "已通过", value: "approved" },
-  { label: "已拒绝", value: "rejected" },
-  { label: "全部", value: "all" },
-];
 
 type SubmissionsPageProps = {
   searchParams: Promise<{
@@ -39,14 +33,24 @@ type SubmissionsPageProps = {
 
 export default async function SubmissionsPage({ searchParams }: SubmissionsPageProps) {
   const { error, notice, page: pageParam, status: statusParam } = await searchParams;
-  const status = coerceStatusFilter(statusParam);
-  const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
-  const [{ rows, total }, { categories, tags, tones }] = await loadAdminPageData((supabase) => Promise.all([
+  const status = coerceSubmissionStatus(statusParam);
+  const page = coerceSubmissionPage(pageParam);
+  const { rows, total } = await loadAdminPageData((supabase) =>
     listSubmissionsPage(supabase, { status, page, pageSize: PAGE_SIZE }),
-    listAllDictionaries(supabase),
-  ]));
+  );
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (page > lastPage) {
+    const params = new URLSearchParams(buildSubmissionsHref(status, lastPage).split("?")[1]);
+    if (error) {
+      params.set("error", error);
+    }
+    if (notice) {
+      params.set("notice", notice);
+    }
+    redirect(`/dashboard/submissions${params.size ? `?${params}` : ""}`);
+  }
   const items = rows.map(toBatchListItem);
-  const activeTab = statusTabs.find((tab) => tab.value === status) ?? statusTabs[0];
+  const activeTab = submissionStatusTabs.find((tab) => tab.value === status) ?? submissionStatusTabs[0];
 
   return (
     <div className="space-y-5">
@@ -62,49 +66,18 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
 
       <Notice error={error} notice={notice} />
 
-      <nav aria-label="状态筛选" className="flex flex-wrap gap-2">
-        {statusTabs.map((tab) => {
-          const isActive = tab.value === status;
-
-          return (
-            <Link
-              className={`border px-3 py-1.5 text-xs uppercase tracking-[0.16em] transition ${
-                isActive
-                  ? "border-borderStrong bg-panel text-foreground"
-                  : "border-border text-subtle hover:border-borderStrong hover:text-foreground"
-              }`}
-              href={buildStatusHref(tab.value)}
-              key={tab.value}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <SubmissionsBatchList categories={categories} items={items} tags={tags} tones={tones} />
-
-      <Pagination
-        basePath="/dashboard/submissions"
-        page={page}
-        pageSize={PAGE_SIZE}
-        searchParams={{ status: status === "pending" ? undefined : status }}
-        total={total}
-      />
+      <SubmissionStatusNavigation status={status}>
+        <SubmissionsBatchList items={items} key={`${status}:${page}`} returnPath={buildSubmissionsHref(status, page)} />
+        <Pagination
+          basePath="/dashboard/submissions"
+          page={page}
+          pageSize={PAGE_SIZE}
+          searchParams={{ status: status === "pending" ? undefined : status }}
+          total={total}
+        />
+      </SubmissionStatusNavigation>
     </div>
   );
-}
-
-function coerceStatusFilter(value: string | undefined): SubmissionStatusFilter {
-  if (value === "approved" || value === "rejected" || value === "all") {
-    return value;
-  }
-
-  return "pending";
-}
-
-function buildStatusHref(status: SubmissionStatusFilter) {
-  return status === "pending" ? "/dashboard/submissions" : `/dashboard/submissions?status=${status}`;
 }
 
 function toBatchListItem(submission: SubmissionListRow): SubmissionBatchListItem {

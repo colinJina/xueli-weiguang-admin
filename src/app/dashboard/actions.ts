@@ -26,6 +26,8 @@ import {
   normalizeToneFamilyKey,
 } from "@/lib/review/review-utils";
 import type { SubmissionRow } from "@/lib/review/types";
+import { getSubmissionReturnPath } from "@/lib/review/submission-navigation";
+import { getMenuReturnPath } from "@/lib/review/menu-navigation";
 import { publishCosSubmission } from "@/lib/storage/cos/publish";
 
 type DictionaryKind = "categories" | "tags" | "tone_families" | "tones";
@@ -38,7 +40,10 @@ const dictionaryPaths: Record<DictionaryKind, string> = {
 };
 
 function redirectWithMessage(path: string, key: "error" | "notice", message: string): never {
-  redirect(`${path}?${key}=${encodeURIComponent(message)}`);
+  const [pathname, query] = path.split("?");
+  const params = new URLSearchParams(query);
+  params.set(key, message);
+  redirect(`${pathname}?${params}`);
 }
 
 // 成功分支在 try 内调用 redirect 时会抛出 NEXT_REDIRECT，必须先原样重抛，
@@ -157,6 +162,8 @@ export async function approveSubmission(formData: FormData) {
 
     revalidatePath("/dashboard/submissions");
     revalidatePath("/dashboard/videos");
+    revalidatePath(path);
+    revalidatePath("/dashboard");
     redirectWithMessage("/dashboard/submissions", "notice", "投稿已通过。");
   } catch (error) {
     redirectActionError(error, path);
@@ -170,7 +177,7 @@ export async function rejectSubmission(formData: FormData) {
   try {
     const { supabase, user } = await requireAdmin();
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
-    const { error } = await supabase
+    const { data: rejectedRows, error } = await supabase
       .from("submissions")
       .update({
         status: "rejected",
@@ -179,10 +186,15 @@ export async function rejectSubmission(formData: FormData) {
         review_note: reviewNote,
       })
       .eq("id", id)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id");
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (!rejectedRows?.length) {
+      throw new Error("投稿不存在或已被审核，请刷新列表。");
     }
 
     const { data: pendingHeroRequest, error: pendingHeroRequestError } = await supabase
@@ -211,6 +223,8 @@ export async function rejectSubmission(formData: FormData) {
 
     revalidatePath("/dashboard/submissions");
     revalidatePath("/dashboard/home-hero");
+    revalidatePath(path);
+    revalidatePath("/dashboard");
     redirectWithMessage("/dashboard/submissions", "notice", "投稿已拒绝。");
   } catch (error) {
     redirectActionError(error, path);
@@ -267,7 +281,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 export async function batchApproveSubmissions(formData: FormData) {
-  const listPath = "/dashboard/submissions";
+  const listPath = getSubmissionReturnPath(formData.get("returnPath"));
 
   try {
     const { supabase } = await requireAdmin();
@@ -282,9 +296,18 @@ export async function batchApproveSubmissions(formData: FormData) {
     const toneIds = coerceSelectedIds(formData, "toneIds", 3);
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
 
+    const { data: submissions, error: submissionsError } = await supabase
+      .from("submissions")
+      .select("*")
+      .in("id", ids);
+    if (submissionsError) {
+      throw new Error(submissionsError.message);
+    }
+    const submissionsById = new Map(((submissions ?? []) as SubmissionRow[]).map((submission) => [submission.id, submission]));
+
     const results = await mapWithConcurrency(ids, BATCH_CONCURRENCY, async (id) => {
       try {
-        const submission = await getSubmissionById(supabase, id);
+        const submission = submissionsById.get(id);
 
         if (!submission) {
           throw new Error("投稿不存在。");
@@ -338,7 +361,9 @@ export async function batchApproveSubmissions(formData: FormData) {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/submissions/[id]", "page");
     revalidatePath("/dashboard/videos");
+    revalidatePath("/dashboard/home-hero");
 
     if (failures.length === 0) {
       redirectWithMessage(listPath, "notice", `已通过 ${approvedCount} 条投稿。`);
@@ -357,7 +382,7 @@ export async function batchApproveSubmissions(formData: FormData) {
 }
 
 export async function batchRejectSubmissions(formData: FormData) {
-  const listPath = "/dashboard/submissions";
+  const listPath = getSubmissionReturnPath(formData.get("returnPath"));
 
   try {
     const { supabase, user } = await requireAdmin();
@@ -393,7 +418,7 @@ export async function batchRejectSubmissions(formData: FormData) {
         throw new Error(heroRequestError.message);
       }
 
-      for (const request of (heroRequests ?? []) as Array<{ submission_id: string }>) {
+      await mapWithConcurrency((heroRequests ?? []) as Array<{ submission_id: string }>, BATCH_CONCURRENCY, async (request) => {
         const { error: rejectHeroError } = await supabase.rpc(
           "reject_home_hero_feature_request",
           {
@@ -404,13 +429,19 @@ export async function batchRejectSubmissions(formData: FormData) {
         if (rejectHeroError) {
           throw new Error(rejectHeroError.message);
         }
-      }
+      });
     }
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/submissions/[id]", "page");
     revalidatePath("/dashboard/home-hero");
-    redirectWithMessage(listPath, "notice", `已拒绝 ${rejectedIds.length} 条投稿。`);
+    const skippedCount = ids.length - rejectedIds.length;
+    redirectWithMessage(
+      listPath,
+      rejectedIds.length ? "notice" : "error",
+      `已拒绝 ${rejectedIds.length} 条投稿。${skippedCount ? `${skippedCount} 条不存在或已被审核，请刷新列表。` : ""}`,
+    );
   } catch (error) {
     redirectActionError(error, listPath);
   }
@@ -418,7 +449,7 @@ export async function batchRejectSubmissions(formData: FormData) {
 
 export async function applyHomeHeroFeatureRequest(formData: FormData) {
   const submissionId = getStringField(formData, "submissionId");
-  const path = "/dashboard/home-hero";
+  const path = getMenuReturnPath("/dashboard/home-hero", formData.get("returnPath"));
 
   try {
     if (!submissionId) {
@@ -434,7 +465,7 @@ export async function applyHomeHeroFeatureRequest(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath(path);
+    revalidatePath("/dashboard/home-hero");
     redirectWithMessage(path, "notice", "已设为首页精选。");
   } catch (error) {
     redirectActionError(error, path);
@@ -443,7 +474,7 @@ export async function applyHomeHeroFeatureRequest(formData: FormData) {
 
 export async function rejectHomeHeroFeatureRequest(formData: FormData) {
   const submissionId = getStringField(formData, "submissionId");
-  const path = "/dashboard/home-hero";
+  const path = getMenuReturnPath("/dashboard/home-hero", formData.get("returnPath"));
 
   try {
     if (!submissionId) {
@@ -459,7 +490,7 @@ export async function rejectHomeHeroFeatureRequest(formData: FormData) {
       throw new Error(error.message);
     }
 
-    revalidatePath(path);
+    revalidatePath("/dashboard/home-hero");
     redirectWithMessage(path, "notice", "已拒绝首页精选申请。");
   } catch (error) {
     redirectActionError(error, path);
@@ -469,7 +500,7 @@ export async function rejectHomeHeroFeatureRequest(formData: FormData) {
 export async function deletePublishedVideo(formData: FormData) {
   const id = getStringField(formData, "videoId");
   const confirmDelete = getStringField(formData, "confirmDelete");
-  const path = "/dashboard/videos";
+  const path = getMenuReturnPath("/dashboard/videos", formData.get("returnPath"));
 
   try {
     if (confirmDelete !== "confirmed") {
@@ -486,6 +517,7 @@ export async function deletePublishedVideo(formData: FormData) {
     revalidatePath("/dashboard/videos");
     revalidatePath("/dashboard/home-hero");
     revalidatePath("/dashboard/submissions");
+    revalidatePath("/dashboard/submissions/[id]", "page");
     redirectWithMessage(path, "notice", "视频已删除。");
   } catch (error) {
     redirectActionError(error, path);
@@ -493,11 +525,11 @@ export async function deletePublishedVideo(formData: FormData) {
 }
 
 export async function addDictionaryItem(kind: DictionaryKind, formData: FormData) {
-  const path = dictionaryPaths[kind];
+  const path = getMenuReturnPath(dictionaryPaths[kind], formData.get("returnPath"));
 
   try {
     const { supabase } = await requireAdmin();
-    let error: { message: string } | null;
+    let error: { message: string; code?: string } | null;
 
     if (kind === "tones") {
       const name = normalizeDictionaryName(formData.get("name"));
@@ -514,28 +546,68 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
         color_hex: colorHex,
         is_active: true,
         key: normalizeToneFamilyKey(formData.get("key")),
-        name: normalizeDictionaryName(formData.get("name")),
+        name: normalizeDictionaryName(formData.get("name"), 20),
         sort_order: normalizeSortOrder(formData.get("sortOrder")),
       }));
     } else {
       ({ error } = await supabase
         .from(kind)
-        .insert({ name: normalizeDictionaryName(formData.get("name")) }));
+        .insert({ name: normalizeDictionaryName(formData.get("name")), ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}) }));
     }
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    revalidatePath(path);
+    throwDictionaryError(error);
+    revalidateDictionaryPages();
     redirectWithMessage(path, "notice", "条目已添加。");
   } catch (error) {
     redirectActionError(error, path);
   }
 }
 
+function throwDictionaryError(error: { message: string; code?: string } | null) {
+  if (!error) {
+    return;
+  }
+  const message = error.code === "23505"
+    ? "名称或 Key 已存在，请使用其他值。"
+    : error.code === "23503"
+      ? "条目正在被使用，或选择的色族已不存在，请刷新后重试。"
+      : error.message;
+  throw new Error(message);
+}
+
+function revalidateDictionaryPages() {
+  for (const path of Object.values(dictionaryPaths)) {
+    revalidatePath(path);
+  }
+  revalidatePath("/dashboard/submissions");
+  revalidatePath("/dashboard/submissions/[id]", "page");
+}
+
+export async function updateDictionaryItem(kind: "categories" | "tags", formData: FormData) {
+  const path = getMenuReturnPath(dictionaryPaths[kind], formData.get("returnPath"));
+  try {
+    const { supabase } = await requireAdmin();
+    const id = getStringField(formData, "id");
+    if (!id) {
+      throw new Error("缺少条目 ID。");
+    }
+    const { data, error } = await supabase.from(kind).update({
+      name: normalizeDictionaryName(formData.get("name")),
+      ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}),
+    }).eq("id", id).select("id").maybeSingle();
+    throwDictionaryError(error);
+    if (!data) {
+      throw new Error("条目已不存在，请刷新列表。");
+    }
+    revalidateDictionaryPages();
+    redirectWithMessage(path, "notice", "条目已更新。");
+  } catch (error) {
+    redirectActionError(error, path);
+  }
+}
+
 export async function updateToneItem(formData: FormData) {
-  const path = dictionaryPaths.tones;
+  const path = getMenuReturnPath(dictionaryPaths.tones, formData.get("returnPath"));
 
   try {
     const { supabase } = await requireAdmin();
@@ -547,20 +619,20 @@ export async function updateToneItem(formData: FormData) {
 
     const manualColorHex = getStringField(formData, "manualColorHex");
     const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("tones")
       .update({
         color_hex: colorHex,
         family_id: normalizeToneFamilyId(formData.get("familyId")),
         name: normalizeDictionaryName(formData.get("name")),
       })
-      .eq("id", id);
+      .eq("id", id).select("id").maybeSingle();
 
-    if (error) {
-      throw new Error(error.message);
+    throwDictionaryError(error);
+    if (!data) {
+      throw new Error("色调已不存在，请刷新列表。");
     }
-
-    revalidatePath(path);
+    revalidateDictionaryPages();
     redirectWithMessage(path, "notice", "色调已更新。");
   } catch (error) {
     redirectActionError(error, path);
@@ -568,7 +640,7 @@ export async function updateToneItem(formData: FormData) {
 }
 
 export async function updateToneFamilyItem(formData: FormData) {
-  const path = dictionaryPaths.tone_families;
+  const path = getMenuReturnPath(dictionaryPaths.tone_families, formData.get("returnPath"));
 
   try {
     const { supabase } = await requireAdmin();
@@ -580,22 +652,22 @@ export async function updateToneFamilyItem(formData: FormData) {
 
     const manualColorHex = getStringField(formData, "manualColorHex");
     const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("tone_families")
       .update({
         color_hex: colorHex,
         is_active: formData.get("isActive") === "on",
         key: normalizeToneFamilyKey(formData.get("key")),
-        name: normalizeDictionaryName(formData.get("name")),
+        name: normalizeDictionaryName(formData.get("name"), 20),
         sort_order: normalizeSortOrder(formData.get("sortOrder")),
       })
-      .eq("id", id);
+      .eq("id", id).select("id").maybeSingle();
 
-    if (error) {
-      throw new Error(error.message);
+    throwDictionaryError(error);
+    if (!data) {
+      throw new Error("色族已不存在，请刷新列表。");
     }
-
-    revalidatePath(path);
+    revalidateDictionaryPages();
     redirectWithMessage(path, "notice", "色族已更新。");
   } catch (error) {
     redirectActionError(error, path);
@@ -603,7 +675,7 @@ export async function updateToneFamilyItem(formData: FormData) {
 }
 
 export async function deleteDictionaryItem(kind: DictionaryKind, formData: FormData) {
-  const path = dictionaryPaths[kind];
+  const path = getMenuReturnPath(dictionaryPaths[kind], formData.get("returnPath"));
 
   try {
     const { supabase } = await requireAdmin();
@@ -613,15 +685,31 @@ export async function deleteDictionaryItem(kind: DictionaryKind, formData: FormD
       throw new Error("缺少条目 ID。");
     }
 
-    const { error } = await supabase.from(kind).delete().eq("id", id);
+    const references = {
+      categories: { table: "videos", column: "category_id", message: "该分类已被视频使用，调整视频分类后再删除。" },
+      tags: { table: "video_tags", column: "tag_id", message: "该标签已被视频使用，解除绑定后再删除。" },
+      tones: { table: "video_tones", column: "tone_id", message: "该色调已被视频使用，解除绑定后再删除。" },
+      tone_families: { table: "tones", column: "family_id", message: "该色族仍有色调归属，请先调整色调归属。" },
+    }[kind];
+    const usage = await supabase.from(references.table).select(references.column, { count: "exact", head: true }).eq(references.column, id);
+    if (usage.error) {
+      throw new Error(usage.error.message);
+    }
+    if (usage.count) {
+      throw new Error(references.message);
+    }
+    const { data, error } = await supabase.from(kind).delete().eq("id", id).select("id").maybeSingle();
 
     if (error) {
       throw new Error(
-        error.code === "23503" ? "该条目已被已发布视频使用。" : error.message,
+        error.code === "23503" ? references.message : error.message,
       );
     }
 
-    revalidatePath(path);
+    if (!data) {
+      throw new Error("条目已不存在，请刷新列表。");
+    }
+    revalidateDictionaryPages();
     redirectWithMessage(path, "notice", "条目已删除。");
   } catch (error) {
     redirectActionError(error, path);
