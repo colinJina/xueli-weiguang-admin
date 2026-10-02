@@ -22,25 +22,37 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   const isNonAdmin = context.user && !context.isAdmin;
-  const errorMessage =
-    error === "not_admin" || isNonAdmin
-      ? "当前账号已登录，但尚未被标记为管理员。"
-      : null;
+  const errorMessage = error === "not_admin" || isNonAdmin ? "无管理员权限" : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-5 py-8">
-      <section className="w-full max-w-sm border border-borderStrong bg-surface p-6">
-        <div className="mb-6 space-y-2">
-          <p className="text-xs uppercase tracking-[0.28em] text-subtle">管理控制台</p>
-          <h1 className="text-2xl font-semibold tracking-normal text-foreground">雪笠微光</h1>
-          <p className="text-sm leading-6 text-muted">使用 Supabase 管理员账号继续。</p>
-        </div>
+    <main className="login-shell">
+      <link crossOrigin="anonymous" href={process.env.NEXT_PUBLIC_SUPABASE_URL} rel="preconnect" />
+      <section aria-labelledby="login-title" className="admin-card login-card">
+        <header className="mb-6 flex flex-col items-center gap-4">
+          <span
+            aria-hidden="true"
+            className="flex h-control-lg w-control-lg items-center justify-center rounded-control border border-borderStrong bg-panel"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+            </svg>
+          </span>
+          <h1 className="text-2xl font-semibold leading-8" id="login-title">
+            登录
+          </h1>
+        </header>
         {errorMessage ? (
-          <div className="mb-4 border border-borderStrong bg-panel px-3 py-2 text-sm text-muted">
+          <div className="admin-alert mb-6" role="alert">
             {errorMessage}
           </div>
         ) : null}
-        {isNonAdmin ? <SignOutButton /> : <LoginForm />}
+        {isNonAdmin ? (
+          <div className="flex justify-center">
+            <SignOutButton />
+          </div>
+        ) : (
+          <LoginForm />
+        )}
       </section>
     </main>
   );
