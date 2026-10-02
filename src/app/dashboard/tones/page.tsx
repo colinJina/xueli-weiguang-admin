@@ -1,5 +1,5 @@
 import { TonesPage as TonesDictionaryPage } from "@/components/dashboard/dictionary-page";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { listToneFamilies, listToneItems } from "@/lib/review/queries";
 
 export const metadata = {
@@ -14,8 +14,13 @@ type TonesPageProps = {
 };
 
 export default async function TonesPage({ searchParams }: TonesPageProps) {
-  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const [families, items] = await Promise.all([listToneFamilies(supabase), listToneItems(supabase)]);
+  const [{ error, notice }, [families, items]] = await Promise.all([
+    searchParams,
+    loadAdminPageData((supabase) => {
+      const familiesPromise = listToneFamilies(supabase);
+      return Promise.all([familiesPromise, listToneItems(supabase, familiesPromise)]);
+    }),
+  ]);
 
   return (
     <TonesDictionaryPage

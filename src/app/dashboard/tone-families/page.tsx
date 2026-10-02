@@ -1,5 +1,5 @@
 import { ToneFamiliesPage } from "@/components/dashboard/dictionary-page";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { listToneFamilies } from "@/lib/review/queries";
 
 export const metadata = {
@@ -14,8 +14,10 @@ type ToneFamiliesRouteProps = {
 };
 
 export default async function ToneFamiliesRoute({ searchParams }: ToneFamiliesRouteProps) {
-  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const families = await listToneFamilies(supabase);
+  const [{ error, notice }, families] = await Promise.all([
+    searchParams,
+    loadAdminPageData(listToneFamilies),
+  ]);
 
   return <ToneFamiliesPage error={error} families={families} notice={notice} />;
 }

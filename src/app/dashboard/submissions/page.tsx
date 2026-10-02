@@ -6,7 +6,7 @@ import {
   SubmissionsBatchList,
   type SubmissionBatchListItem,
 } from "@/components/dashboard/submissions-batch-list";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import {
   getSubmissionStorageProvider,
   isCosSubmission,
@@ -38,14 +38,13 @@ type SubmissionsPageProps = {
 };
 
 export default async function SubmissionsPage({ searchParams }: SubmissionsPageProps) {
-  const [{ error, notice, page: pageParam, status: statusParam }, { supabase }] =
-    await Promise.all([searchParams, requireAdmin()]);
+  const { error, notice, page: pageParam, status: statusParam } = await searchParams;
   const status = coerceStatusFilter(statusParam);
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
-  const [{ rows, total }, { categories, tags, tones }] = await Promise.all([
+  const [{ rows, total }, { categories, tags, tones }] = await loadAdminPageData((supabase) => Promise.all([
     listSubmissionsPage(supabase, { status, page, pageSize: PAGE_SIZE }),
     listAllDictionaries(supabase),
-  ]);
+  ]));
   const items = rows.map(toBatchListItem);
   const activeTab = statusTabs.find((tab) => tab.value === status) ?? statusTabs[0];
 

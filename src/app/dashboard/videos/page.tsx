@@ -2,7 +2,7 @@ import { deletePublishedVideo } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
 import { Pagination } from "@/components/dashboard/pagination";
 import { PendingButton } from "@/components/dashboard/pending-button";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { getSubmissionStorageProvider, listPublishedVideosPage } from "@/lib/review/queries";
 import type { PublishedVideoRow } from "@/lib/review/types";
 
@@ -21,15 +21,12 @@ type VideosPageProps = {
 };
 
 export default async function VideosPage({ searchParams }: VideosPageProps) {
-  const [{ error, notice, page: pageParam }, { supabase }] = await Promise.all([
-    searchParams,
-    requireAdmin(),
-  ]);
+  const { error, notice, page: pageParam } = await searchParams;
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
-  const { rows: videos, total } = await listPublishedVideosPage(supabase, {
+  const { rows: videos, total } = await loadAdminPageData((supabase) => listPublishedVideosPage(supabase, {
     page,
     pageSize: PAGE_SIZE,
-  });
+  }));
 
   return (
     <div className="space-y-5">
@@ -45,7 +42,7 @@ export default async function VideosPage({ searchParams }: VideosPageProps) {
 
       <Notice error={error} notice={notice} />
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="hidden grid-cols-[1.2fr_150px_140px_220px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle lg:grid">
           <span>标题</span>
           <span>作者</span>

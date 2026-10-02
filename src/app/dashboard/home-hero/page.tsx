@@ -4,7 +4,7 @@ import {
 } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import { requireAdmin } from "@/lib/admin/auth";
+import { loadAdminPageData } from "@/lib/admin/auth";
 import { getHomeHeroRequestApplyDisabledMessage } from "@/lib/review/home-hero";
 import { listHomeHeroFeatureRequests } from "@/lib/review/queries";
 import type {
@@ -37,8 +37,10 @@ const submissionStatusLabels: Record<SubmissionStatus, string> = {
 };
 
 export default async function HomeHeroPage({ searchParams }: HomeHeroPageProps) {
-  const [{ error, notice }, { supabase }] = await Promise.all([searchParams, requireAdmin()]);
-  const requests = await listHomeHeroFeatureRequests(supabase);
+  const [{ error, notice }, requests] = await Promise.all([
+    searchParams,
+    loadAdminPageData(listHomeHeroFeatureRequests),
+  ]);
   const pendingCount = requests.filter((request) => request.request_status === "pending").length;
   const readyCount = requests.filter(
     (request) => getHomeHeroRequestApplyDisabledMessage(request) === null,
@@ -59,7 +61,7 @@ export default async function HomeHeroPage({ searchParams }: HomeHeroPageProps) 
 
       <Notice error={error} notice={notice} />
 
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="hidden grid-cols-[96px_1.4fr_120px_120px_160px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle lg:grid">
           <span>封面</span>
           <span>投稿</span>
