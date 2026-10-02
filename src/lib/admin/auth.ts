@@ -12,26 +12,43 @@ export type AdminContext = {
   };
 };
 
-// cache() 让 layout 与 page 在同一次请求内共享同一份鉴权结果，避免重复的
-// getUser + profiles 网络往返。
-export const getAdminContext = cache(async () => {
+const getVerifiedContext = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // getClaims verifies signature/expiry with cached public keys. Legacy
+  // symmetric keys automatically fall back to an Auth server check.
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims.sub) {
+    return { supabase, user: null };
+  }
 
-  if (!session) {
+  const claims = data.claims;
+  return {
+    supabase,
+    user: {
+      id: claims.sub,
+      email: typeof claims.email === "string" ? claims.email : undefined,
+    },
+  };
+});
+
+// Share authorization only within one render/request. Never cache admin roles
+// across requests: revoking profiles.is_admin must take effect immediately.
+export const getAdminContext = cache(async (verifyCurrentUser = false) => {
+  const { supabase, user } = await getVerifiedContext();
+  if (!user) {
     return { supabase, user: null, isAdmin: false };
   }
 
-  const [userResult, profileResult] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle(),
+  const [profileResult, currentUserResult] = await Promise.all([
+    supabase.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
+    // Mutations still check the current Auth user, including bans/deletion.
+    // Run this alongside the role lookup to avoid another network waterfall.
+    verifyCurrentUser ? supabase.auth.getUser() : Promise.resolve(null),
   ]);
 
-  const user = userResult.data.user;
-
-  if (!user) {
+  if (verifyCurrentUser && (
+    !currentUserResult || currentUserResult.error || currentUserResult.data.user?.id !== user.id
+  )) {
     return { supabase, user: null, isAdmin: false };
   }
 
@@ -43,14 +60,14 @@ export const getAdminContext = cache(async () => {
     supabase,
     user: {
       id: user.id,
-      email: user.email,
+      email: currentUserResult?.data.user?.email ?? user.email,
     },
     isAdmin: Boolean(profileResult.data?.is_admin),
   };
 });
 
-export async function requireAdmin(): Promise<AdminContext> {
-  const context = await getAdminContext();
+export async function requireAdmin(verifyCurrentUser = false): Promise<AdminContext> {
+  const context = verifyCurrentUser ? await getAdminContext(true) : await getAdminContext();
 
   if (!context.user) {
     redirect("/login");
@@ -64,4 +81,33 @@ export async function requireAdmin(): Promise<AdminContext> {
     supabase: context.supabase,
     user: context.user,
   };
+}
+
+export async function requireAdminForAction(): Promise<AdminContext> {
+  return requireAdmin(true);
+}
+
+// Only use for read-only queries with the user's RLS-protected client. Start
+// reads alongside the live role check, but never expose data before it passes.
+export async function loadAdminPageData<T>(
+  load: (supabase: AdminContext["supabase"]) => Promise<T>,
+): Promise<T> {
+  const { supabase, user } = await getVerifiedContext();
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Handle early read failures immediately so authorization still determines
+  // whether this request redirects, and rejected reads cannot go unhandled.
+  const resultPromise = Promise.resolve().then(() => load(supabase)).then(
+    (data) => ({ ok: true as const, data }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+
+  await requireAdmin();
+  const result = await resultPromise;
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.data;
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdminForAction as requireAdmin } from "@/lib/admin/auth";
 import {
   deletePublishedVideoRecord,
   type DeletePublishedVideoSupabaseClient,
