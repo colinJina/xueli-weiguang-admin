@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useOptimistic, useTransition } from "react";
+
+import { Spinner } from "@/components/dashboard/spinner";
 
 const links = [
   { href: "/dashboard/submissions", label: "投稿审核" },
@@ -15,6 +18,10 @@ const links = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [selectedPathname, selectPathname] = useOptimistic(pathname);
+  const [isPending, startTransition] = useTransition();
+  const pendingLink = isPending ? links.find((link) => link.href === selectedPathname) : undefined;
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-border bg-background md:min-h-screen md:w-60 md:border-b-0 md:border-r">
@@ -25,26 +32,41 @@ export function DashboardSidebar() {
         </Link>
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto px-3 py-3 md:flex-col md:overflow-visible">
+      <nav aria-label="后台导航" aria-busy={isPending} className="flex gap-1 overflow-x-auto px-3 py-3 md:flex-col md:overflow-visible">
         {links.map((link) => {
-          const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+          const isActive = selectedPathname === link.href || selectedPathname.startsWith(`${link.href}/`);
+          const isCurrent = pathname === link.href || pathname.startsWith(`${link.href}/`);
 
           return (
             <Link
               className={[
-                "whitespace-nowrap border px-3 py-2 text-sm transition",
+                "flex h-control shrink-0 items-center whitespace-nowrap rounded-control border px-3 text-sm transition-colors duration-150",
                 isActive
                   ? "border-foreground bg-foreground text-background"
                   : "border-transparent text-muted hover:border-borderStrong hover:text-foreground",
               ].join(" ")}
+              aria-current={isCurrent ? "page" : undefined}
               href={link.href}
               key={link.href}
+              onNavigate={(event) => {
+                event.preventDefault();
+                startTransition(() => {
+                  selectPathname(link.href);
+                  router.push(link.href);
+                });
+              }}
             >
               {link.label}
+              <span className="ml-auto flex w-4 shrink-0 items-center justify-end pl-2">
+                {pendingLink?.href === link.href ? <Spinner className="h-3 w-3" /> : null}
+              </span>
             </Link>
           );
         })}
       </nav>
+      <p aria-live="polite" className="sr-only">
+        {pendingLink ? `正在打开${pendingLink.label}` : ""}
+      </p>
     </aside>
   );
 }
