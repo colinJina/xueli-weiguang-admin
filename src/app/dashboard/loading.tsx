@@ -11,7 +11,7 @@ export default function DashboardLoading() {
 
       <section className="grid gap-3 md:grid-cols-3">
         {Array.from({ length: 3 }, (_, index) => (
-          <div className="space-y-4 border border-border bg-surface p-4" key={index}>
+          <div className="space-y-4 admin-card p-4" key={index}>
             <div className="admin-skeleton h-3 w-24" />
             <div className="admin-skeleton h-9 w-16" />
             <div className="admin-skeleton h-4 w-36" />

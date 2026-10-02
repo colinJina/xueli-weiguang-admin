@@ -11,7 +11,7 @@ export default function SubmissionDetailLoading() {
       </div>
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-4 border border-border bg-surface p-4">
+        <div className="space-y-4 admin-card p-4">
           <div className="space-y-3 border-b border-border pb-3">
             <div className="admin-skeleton h-3 w-16" />
             <div className="admin-skeleton h-6 w-40" />
@@ -32,7 +32,7 @@ export default function SubmissionDetailLoading() {
 
         <div className="space-y-4">
           {Array.from({ length: 2 }, (_, index) => (
-            <div className="space-y-4 border border-border bg-surface p-4" key={index}>
+            <div className="space-y-4 admin-card p-4" key={index}>
               <div className="space-y-3 border-b border-border pb-3">
                 <div className="admin-skeleton h-3 w-12" />
                 <div className="admin-skeleton h-6 w-32" />

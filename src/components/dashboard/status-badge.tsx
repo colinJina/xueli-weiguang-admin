@@ -8,7 +8,7 @@ const labels: Record<SubmissionStatus, string> = {
 
 export function StatusBadge({ status }: { status: SubmissionStatus }) {
   return (
-    <span className="inline-flex border border-borderStrong px-2 py-1 text-xs uppercase tracking-[0.14em] text-muted">
+    <span className="inline-flex rounded-badge border border-borderStrong px-2 py-1 text-xs leading-4 text-muted">
       {labels[status]}
     </span>
   );

@@ -87,7 +87,7 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
 
   return (
     <form action={batchApproveSubmissions}>
-      <section className="overflow-hidden border border-border bg-surface">
+      <section className="overflow-hidden admin-card">
         <div className="hidden grid-cols-[36px_1.2fr_1fr_130px_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle md:grid">
           <span className="flex items-center">
             <input
@@ -204,7 +204,7 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
                 </div>
               </div>
 
-              <details className="border border-border bg-surface">
+              <details className="admin-card">
                 <summary className="cursor-pointer px-3 py-2 text-xs uppercase tracking-[0.16em] text-subtle transition hover:text-foreground">
                   标签 / 色调（可选，应用到全部选中项）
                 </summary>
