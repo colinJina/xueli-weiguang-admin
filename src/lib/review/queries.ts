@@ -7,6 +7,8 @@ import {
   type ReviewFetchedMeta,
 } from "@/lib/review/fetched-meta";
 import { getSafeActionMessage } from "@/lib/review/review-utils";
+import { coerceSubmissionPage } from "@/lib/review/submission-navigation";
+import { escapeLikePattern, normalizeSearch, coerceVideoSource, coerceHomeHeroStatus, type VideoSourceFilter, type HomeHeroStatusFilter } from "@/lib/review/menu-navigation";
 import type {
   DictionaryItem,
   HomeHeroFeatureRequestRow,
@@ -37,16 +39,13 @@ const publishedVideoColumns =
 // PostgREST 对超出总行数的 range 会返回 416（PGRST103），这里视为空页。
 const OUT_OF_RANGE_CODE = "PGRST103";
 
-const homeHeroRequestStatusOrder: Record<HomeHeroFeatureRequestStatus, number> = {
-  pending: 0,
-  applied: 1,
-  rejected: 2,
-};
-
 type HomeHeroFeatureRequestTableRow = {
   submission_id: string;
   status: HomeHeroFeatureRequestStatus;
   created_at: string;
+  submission: HomeHeroSubmissionSummaryRow & {
+    video: HomeHeroVideoSummaryRow | HomeHeroVideoSummaryRow[] | null;
+  };
 };
 
 type HomeHeroSubmissionSummaryRow = {
@@ -78,6 +77,8 @@ export async function listSubmissionsPage(
     pageSize = 20,
   }: { status?: SubmissionStatusFilter; page?: number; pageSize?: number } = {},
 ) {
+  page = coerceSubmissionPage(page);
+  pageSize = Number.isSafeInteger(pageSize) ? Math.min(100, Math.max(1, pageSize)) : 20;
   const from = (page - 1) * pageSize;
   let query = supabase.from("submissions").select(submissionListColumns, { count: "exact" });
 
@@ -87,11 +88,12 @@ export async function listSubmissionsPage(
 
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, from + pageSize - 1);
 
   if (error) {
     if (error.code === OUT_OF_RANGE_CODE) {
-      return { rows: [] as SubmissionListRow[], total: count ?? 0 };
+      return { rows: [] as SubmissionListRow[], total: count ?? await countSubmissions(supabase, status === "all" ? undefined : status) };
     }
 
     throw new Error(error.message);
@@ -102,25 +104,44 @@ export async function listSubmissionsPage(
 
 export async function listPublishedVideosPage(
   supabase: SupabaseClient,
-  { page = 1, pageSize = 20 }: { page?: number; pageSize?: number } = {},
+  { page = 1, pageSize = 20, query = "", source = "all" }: {
+    page?: number; pageSize?: number; query?: string; source?: VideoSourceFilter;
+  } = {},
 ) {
+  page = coerceSubmissionPage(page);
+  pageSize = Number.isSafeInteger(pageSize) ? Math.min(100, Math.max(1, pageSize)) : 20;
+  query = normalizeSearch(query);
+  source = coerceVideoSource(source);
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await supabase
-    .from("videos")
-    .select(publishedVideoColumns, { count: "exact" })
+  const filteredQuery = (head = false) => {
+    let request = supabase.from("videos").select(head ? "id" : publishedVideoColumns, { count: "exact", head });
+    if (query) {
+      request = request.ilike("title", `%${escapeLikePattern(query)}%`);
+    }
+    if (source !== "all") {
+      request = request.eq("platform", source);
+    }
+    return request;
+  };
+  const { data, error, count } = await filteredQuery()
     .order("published_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, from + pageSize - 1);
 
   if (error) {
     if (error.code === OUT_OF_RANGE_CODE) {
-      return { rows: [] as PublishedVideoRow[], total: count ?? 0 };
+      const counted = count === null ? await filteredQuery(true) : { count, error: null };
+      if (counted.error) {
+        throw new Error(counted.error.message);
+      }
+      return { rows: [] as PublishedVideoRow[], total: counted.count ?? 0 };
     }
 
     throw new Error(error.message);
   }
 
-  return { rows: (data ?? []) as PublishedVideoRow[], total: count ?? 0 };
+  return { rows: (data ?? []) as unknown as PublishedVideoRow[], total: count ?? 0 };
 }
 
 export async function countSubmissions(supabase: SupabaseClient, status?: SubmissionStatus) {
@@ -232,19 +253,20 @@ export async function fetchExternalSubmissionMetadata(
   throw new Error("该投稿来源不需要抓取外部元数据。");
 }
 
-export async function listDictionaryItems(supabase: SupabaseClient, table: string) {
-  const orderColumn = table === "categories" || table === "tone_families" ? "sort_order" : "name";
+export async function listDictionaryItems(supabase: SupabaseClient, table: "categories" | "tags") {
+  const orderColumn = table === "categories" ? "sort_order" : "name";
   const { data, error } = await supabase
     .from(table)
-    .select("*")
+    .select(table === "categories" ? "id,name,sort_order,created_at" : "id,name,created_at")
     .order(orderColumn, { ascending: true })
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as DictionaryItem[];
+  return (data ?? []) as unknown as DictionaryItem[];
 }
 
 export async function listToneFamilies(supabase: SupabaseClient) {
@@ -298,66 +320,40 @@ export async function listAllDictionaries(supabase: SupabaseClient) {
   return { categories, tags, toneFamilies, tones };
 }
 
-export async function listHomeHeroFeatureRequests(supabase: SupabaseClient) {
-  const { data: requestData, error: requestError } = await supabase
-    .from("home_hero_feature_requests")
-    .select("submission_id,status,created_at")
-    .order("created_at", { ascending: false });
-
-  if (requestError) {
-    throw new Error(requestError.message);
-  }
-
-  const requests = (requestData ?? []) as HomeHeroFeatureRequestTableRow[];
-  const submissionIds = requests.map((request) => request.submission_id);
-
-  if (submissionIds.length === 0) {
-    return [];
-  }
-
-  const [submissionsResult, videosResult] = await Promise.all([
-    supabase
-      .from("submissions")
-      .select("id,status,created_at,pending_title,source_url,source_ref,external_id")
-      .in("id", submissionIds),
-    supabase
-      .from("videos")
-      .select("id,submission_id,title,cover_url,published_at,created_at")
-      .in("submission_id", submissionIds)
-      .order("created_at", { ascending: false }),
-  ]);
-
-  if (submissionsResult.error) {
-    throw new Error(submissionsResult.error.message);
-  }
-
-  if (videosResult.error) {
-    throw new Error(videosResult.error.message);
-  }
-
-  const submissionsById = new Map(
-    ((submissionsResult.data ?? []) as HomeHeroSubmissionSummaryRow[]).map((submission) => [
-      submission.id,
-      submission,
-    ]),
-  );
-  const videosBySubmissionId = new Map<string, HomeHeroVideoSummaryRow>();
-
-  for (const video of (videosResult.data ?? []) as HomeHeroVideoSummaryRow[]) {
-    if (!videosBySubmissionId.has(video.submission_id)) {
-      videosBySubmissionId.set(video.submission_id, video);
+export async function listHomeHeroFeatureRequests(supabase: SupabaseClient, {
+  status = "pending", page = 1, pageSize = 20,
+}: { status?: HomeHeroStatusFilter; page?: number; pageSize?: number } = {}) {
+  status = coerceHomeHeroStatus(status);
+  page = coerceSubmissionPage(page);
+  pageSize = Number.isSafeInteger(pageSize) ? Math.min(100, Math.max(1, pageSize)) : 20;
+  const from = (page - 1) * pageSize;
+  // Existing FKs allow PostgREST to return a request and its associated records in one read.
+  const columns = "submission_id,status,created_at,submission:submissions!inner(id,status,created_at,pending_title,source_url,source_ref,external_id,video:videos(id,submission_id,title,cover_url,published_at,created_at))";
+  const filteredQuery = (head = false) => {
+    let request = supabase.from("home_hero_feature_requests").select(head ? "submission_id,submission:submissions!inner(id)" : columns, { count: "exact", head });
+    if (status !== "all") {
+      request = request.eq("status", status);
     }
-  }
-
-  return requests
-    .map((request): HomeHeroFeatureRequestRow | null => {
-      const submission = submissionsById.get(request.submission_id);
-
-      if (!submission) {
-        return null;
+    return request;
+  };
+  const { data, error, count } = await filteredQuery()
+    .order("created_at", { ascending: false })
+    .order("submission_id", { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (error) {
+    if (error.code === OUT_OF_RANGE_CODE) {
+      const counted = count === null ? await filteredQuery(true) : { count, error: null };
+      if (counted.error) {
+        throw new Error(counted.error.message);
       }
-
-      const video = videosBySubmissionId.get(request.submission_id);
+      return { rows: [] as HomeHeroFeatureRequestRow[], total: counted.count ?? 0 };
+    }
+    throw new Error(error.message);
+  }
+  const rows = (data as unknown as HomeHeroFeatureRequestTableRow[] ?? [])
+    .map((request): HomeHeroFeatureRequestRow => {
+      const submission = request.submission;
+      const video = Array.isArray(submission.video) ? submission.video[0] : submission.video;
       const title =
         video?.title ??
         submission.pending_title ??
@@ -378,15 +374,8 @@ export async function listHomeHeroFeatureRequests(supabase: SupabaseClient) {
         title,
         video_id: video?.id ?? null,
       };
-    })
-    .filter((request): request is HomeHeroFeatureRequestRow => request !== null)
-    .sort((a, b) => {
-      const statusDelta =
-        homeHeroRequestStatusOrder[a.request_status] -
-        homeHeroRequestStatusOrder[b.request_status];
-
-      return statusDelta || Date.parse(b.created_at) - Date.parse(a.created_at);
     });
+  return { rows, total: count ?? 0 };
 }
 
 export async function ensureSubmissionMetadata(

@@ -24,12 +24,13 @@ export function coerceSelectedIds(formData: FormData, fieldName: string, limit: 
   return ids;
 }
 
-export function normalizeDictionaryName(value: FormDataEntryValue | null) {
+export function normalizeDictionaryName(value: FormDataEntryValue | null, maxLength = 40) {
   const name = String(value ?? "").trim();
 
   if (!name) {
     throw new Error("必须填写名称。");
   }
+  if (Array.from(name).length > maxLength) {throw new Error(`名称最多 ${maxLength} 个字符。`);}
 
   return name;
 }
@@ -67,8 +68,8 @@ export function normalizeToneFamilyId(value: FormDataEntryValue | null) {
 export function normalizeSortOrder(value: FormDataEntryValue | null) {
   const sortOrder = Number(String(value ?? "0").trim() || "0");
 
-  if (!Number.isInteger(sortOrder)) {
-    throw new Error("排序必须是整数。");
+  if (!Number.isSafeInteger(sortOrder) || sortOrder < -2147483648 || sortOrder > 2147483647) {
+    throw new Error("排序必须是有效的 32 位整数。");
   }
 
   return sortOrder;

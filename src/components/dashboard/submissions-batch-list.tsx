@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { batchApproveSubmissions, batchRejectSubmissions } from "@/app/dashboard/actions";
 import { PendingButton } from "@/components/dashboard/pending-button";
@@ -28,8 +28,12 @@ type ToneOption = DictionaryOption & {
 };
 
 type SubmissionsBatchListProps = {
-  categories: DictionaryOption[];
   items: SubmissionBatchListItem[];
+  returnPath: string;
+};
+
+type ReviewOptions = {
+  categories: DictionaryOption[];
   tags: DictionaryOption[];
   tones: ToneOption[];
 };
@@ -38,16 +42,52 @@ const MAX_TAGS = 4;
 const MAX_TONES = 3;
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
-export function SubmissionsBatchList({ categories, items, tags, tones }: SubmissionsBatchListProps) {
+export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchListProps) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedToneIds, setSelectedToneIds] = useState<ReadonlySet<string>>(new Set());
+  const [options, setOptions] = useState<ReviewOptions | null>(null);
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const { categories = [], tags = [], tones = [] } = options ?? {};
 
   const pendingIds = items
     .filter((item) => item.status === "pending")
     .map((item) => item.id);
   const selectedCount = pendingIds.filter((id) => selectedIds.has(id)).length;
   const allPendingSelected = pendingIds.length > 0 && selectedCount === pendingIds.length;
+  const hasSelection = selectedCount > 0;
+
+  // Load publishing options only when the administrator actually selects rows.
+  // Keep them for this list view, and cancel when changing status/page or clearing.
+  useEffect(() => {
+    if (!hasSelection || options) {
+      return;
+    }
+    const controller = new AbortController();
+    setOptionsError("");
+    async function loadOptions() {
+      try {
+        const response = await fetch("/api/admin/review-options", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) {
+          throw new Error("审核选项加载失败，请重试或重新登录。");
+        }
+        const data: ReviewOptions = await response.json();
+        if (!controller.signal.aborted) {
+          setOptions(data);
+        }
+      } catch (_error) {
+        if (!controller.signal.aborted) {
+          setOptionsError("审核选项加载失败，请重试或重新登录。");
+        }
+      }
+    }
+    void loadOptions();
+    return () => controller.abort();
+  }, [hasSelection, options, optionsAttempt]);
 
   const toggleId = (id: string) => {
     setSelectedIds((current) => {
@@ -87,6 +127,7 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
 
   return (
     <form action={batchApproveSubmissions}>
+      <input name="returnPath" type="hidden" value={returnPath} />
       <section className="overflow-hidden admin-card">
         <div className="hidden grid-cols-[36px_1.2fr_1fr_130px_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle md:grid">
           <span className="flex items-center">
@@ -126,6 +167,7 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
               <Link
                 className="col-start-2 grid gap-2 md:col-span-4 md:grid-cols-[1.2fr_1fr_130px_120px] md:items-center"
                 href={`/dashboard/submissions/${item.id}`}
+                prefetch={false}
               >
                 <span className="min-w-0">
                   <span className="block truncate text-foreground">{item.sourceLabel}</span>
@@ -167,12 +209,23 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
                 </button>
               </div>
 
+              {!options ? (
+                <div aria-live="polite" className="flex items-center gap-3 text-sm text-muted">
+                  <span>{optionsError || "正在加载分类、标签和色调…"}</span>
+                  {optionsError ? (
+                    <button className="admin-secondary-button" onClick={() => setOptionsAttempt((attempt) => attempt + 1)} type="button">
+                      重试
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
                 <label className="block space-y-2">
                   <span className="text-xs uppercase tracking-[0.16em] text-subtle">
                     分类（批量通过必选）
                   </span>
-                  <select className="admin-input" name="categoryId" required>
+                  <select className="admin-input" disabled={!options} name="categoryId" required>
                     <option value="">选择分类</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
@@ -190,7 +243,7 @@ export function SubmissionsBatchList({ categories, items, tags, tones }: Submiss
                 </label>
 
                 <div className="flex gap-2">
-                  <PendingButton className="admin-button" pendingText="批量通过中…">
+                  <PendingButton className="admin-button" disabled={!options || categories.length === 0} pendingText="批量通过中…">
                     批量通过
                   </PendingButton>
                   <PendingButton
