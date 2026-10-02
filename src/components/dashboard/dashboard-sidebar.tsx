@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useOptimistic, useTransition } from "react";
-
+import { useDashboardNavigation } from "@/components/dashboard/dashboard-navigation";
 import { Spinner } from "@/components/dashboard/spinner";
 
 const links = [
+  { href: "/dashboard", label: "控制台" },
   { href: "/dashboard/submissions", label: "投稿审核" },
   { href: "/dashboard/videos", label: "已发布视频" },
   { href: "/dashboard/home-hero", label: "首页精选" },
@@ -17,25 +16,29 @@ const links = [
 ];
 
 export function DashboardSidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [selectedPathname, selectPathname] = useOptimistic(pathname);
-  const [isPending, startTransition] = useTransition();
+  const { pathname, selectedPathname, isPending, navigate } = useDashboardNavigation();
   const pendingLink = isPending ? links.find((link) => link.href === selectedPathname) : undefined;
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-border bg-background md:min-h-screen md:w-60 md:border-b-0 md:border-r">
       <div className="border-b border-border px-4 py-4">
         <p className="text-xs uppercase tracking-[0.28em] text-subtle">管理后台</p>
-        <Link className="mt-2 block text-lg font-semibold text-foreground" href="/dashboard">
+        <Link
+          className="mt-2 block text-lg font-semibold text-foreground"
+          href="/dashboard"
+          onNavigate={(event) => {
+            event.preventDefault();
+            navigate("/dashboard");
+          }}
+        >
           雪笠微光
         </Link>
       </div>
 
       <nav aria-label="后台导航" aria-busy={isPending} className="flex gap-1 overflow-x-auto px-3 py-3 md:flex-col md:overflow-visible">
         {links.map((link) => {
-          const isActive = selectedPathname === link.href || selectedPathname.startsWith(`${link.href}/`);
-          const isCurrent = pathname === link.href || pathname.startsWith(`${link.href}/`);
+          const isActive = selectedPathname === link.href || (link.href !== "/dashboard" && selectedPathname.startsWith(`${link.href}/`));
+          const isCurrent = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(`${link.href}/`));
 
           return (
             <Link
@@ -50,10 +53,7 @@ export function DashboardSidebar() {
               key={link.href}
               onNavigate={(event) => {
                 event.preventDefault();
-                startTransition(() => {
-                  selectPathname(link.href);
-                  router.push(link.href);
-                });
+                navigate(link.href);
               }}
             >
               {link.label}
