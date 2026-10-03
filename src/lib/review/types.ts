@@ -39,11 +39,17 @@ export type SubmissionListRow = Pick<
   | "external_id"
   | "source_ref"
   | "pending_title"
+  | "cover_ref"
   | "status"
   | "fetched_at"
   | "fetch_error"
   | "created_at"
->;
+> & {
+  fetched_title: string | null;
+  fetched_cover: string | null;
+  fetched_author: string | null;
+  fetched_duration: number | null;
+};
 
 export type SubmissionStatusFilter = SubmissionStatus | "all";
 

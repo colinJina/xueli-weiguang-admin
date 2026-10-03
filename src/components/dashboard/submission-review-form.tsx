@@ -140,10 +140,21 @@ export function SubmissionReviewForm({ submissionId, canApprove, isPending, isEx
     <form action={approveSubmission} className="admin-card space-y-4 p-4">
       <input name="submissionId" type="hidden" value={submissionId} />
       <ReviewFields>
-      <div className="border-b border-border pb-3"><p className="text-xs uppercase tracking-[0.18em] text-subtle">通过</p><h2 className="mt-2 text-lg font-semibold">发布到档案</h2></div>
-      {showSuggestions ? <PvdexSuggestionPanel result={displayedResult} loading={loading} creating={creating} tagCount={selection.tagIds.length} toneCount={selection.toneIds.length} families={dictionaries.toneFamilies} onRefresh={() => void refresh()} onApply={apply} onCreateTag={(source, name) => createItem("tags", source, name)} onCreateTone={(hex, name, familyId) => createItem("tones", hex, name, familyId)} /> : null}
+      <div className="border-b border-border pb-3"><h2 className="text-lg font-semibold">{isPending ? "审核与发布" : "发布设置"}</h2><p className="mt-1 text-xs leading-5 text-subtle">{isPending ? "确认内容合适后，选择分类并通过审核。" : "此投稿已完成审核。"}</p></div>
+      {showSuggestions ? (
+        <details className="space-y-3">
+          <summary className="cursor-pointer rounded-control border border-border bg-panel px-3 py-3 text-sm text-muted">
+            辅助审核建议（PVDex）
+            <span aria-live="polite" className="mt-1 block pl-4 text-xs text-subtle">{loading ? "正在匹配，其他审核选项可先编辑" : displayedResult?.status === "matched" ? "已匹配，展开查看分类、标签和色调建议" : "展开查看匹配结果"}</span>
+          </summary>
+          <PvdexSuggestionPanel result={displayedResult} loading={loading} creating={creating} tagCount={selection.tagIds.length} toneCount={selection.toneIds.length} families={dictionaries.toneFamilies} onRefresh={() => void refresh()} onApply={apply} onCreateTag={(source, name) => createItem("tags", source, name)} onCreateTone={(hex, name, familyId) => createItem("tones", hex, name, familyId)} />
+        </details>
+      ) : null}
       {message ? <p aria-live="polite" className="border border-border bg-panel p-3 text-sm text-muted" role="status">{message}</p> : null}
       <label className="block space-y-2"><span className="text-xs uppercase tracking-[0.16em] text-subtle">分类</span><select className="admin-input" disabled={!editable} name="categoryId" onChange={(event) => setSelection((current) => ({ ...current, categoryId: event.target.value }))} required value={selection.categoryId}><option value="">选择分类</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <details className="rounded-control border border-border">
+        <summary className="cursor-pointer px-3 py-3 text-sm text-muted">标签与色调（可选）<span className="mt-1 block pl-4 text-xs text-subtle">已选 {selection.tagIds.length} 个标签、{selection.toneIds.length} 个色调</span></summary>
+        <div className="space-y-4 border-t border-border p-3">
       <fieldset className="space-y-2" disabled={!editable}>
         <legend className="text-xs uppercase tracking-[0.16em] text-subtle">标签，最多 4 个 · 已选 {selection.tagIds.length}</legend>
         <div className="grid gap-2 sm:grid-cols-2">{tags.length ? tags.map((item) => {
@@ -160,7 +171,9 @@ export function SubmissionReviewForm({ submissionId, canApprove, isPending, isEx
           return <label className={`flex flex-col items-center gap-2 border border-border bg-panel px-2 py-3 ${disabled ? "opacity-40" : "cursor-pointer"}`} key={item.id}><input aria-label={`色调：${item.name}`} checked={checked} className="peer sr-only" disabled={disabled} name="toneIds" onChange={() => setSelection((current) => ({ ...current, toneIds: toggleReviewSelection(current.toneIds, item.id, MAX_REVIEW_TONES) }))} type="checkbox" value={item.id} /><span aria-hidden="true" className="h-9 w-9 rounded-full border border-borderStrong peer-checked:shadow-[0_0_0_3px_rgba(255,255,255,0.3)]" style={{ backgroundColor: validColor(item.color_hex ?? item.name) }} /><span className="max-w-full break-all text-center text-xs text-muted peer-checked:text-foreground">{item.name}</span>{item.family_name ? <span className="text-xs text-subtle">{item.family_name}</span> : null}</label>;
         }) : <p className="text-sm text-muted">暂无色调。</p>}</div>
       </fieldset>
-      <label className="block space-y-2"><span className="text-xs uppercase tracking-[0.16em] text-subtle">审核备注</span><textarea className="admin-input h-auto min-h-24 py-2" disabled={!isPending} name="reviewNote" onChange={(event) => setReviewNote(event.target.value)} value={reviewNote} /></label>
+        </div>
+      </details>
+      <label className="block space-y-2"><span className="text-xs uppercase tracking-[0.16em] text-subtle">审核备注</span><textarea className="admin-input h-auto min-h-24 py-2" disabled={!isPending} name="reviewNote" onChange={(event) => setReviewNote(event.target.value)} placeholder="填写本次审核意见（可选）" value={reviewNote} /></label>
       <PendingButton className="admin-button w-full" disabled={!canApprove || creating} pendingText="发布中…">通过审核</PendingButton>
       {!canApprove ? <p className="text-xs text-subtle">{disabledMessage}</p> : null}
       </ReviewFields>

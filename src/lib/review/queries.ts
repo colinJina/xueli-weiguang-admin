@@ -31,7 +31,7 @@ const submissionSelectColumns =
   "id,user_id,platform,storage_provider,source_url,external_id,status,auto_fetched_meta,fetched_at,fetch_error,pending_title,pending_description,file_size,mime_type,source_ref,cover_ref,source_etag,cover_etag,reviewed_by,review_note,created_at,reviewed_at";
 
 const submissionListColumns =
-  "id,platform,storage_provider,source_url,external_id,source_ref,pending_title,status,fetched_at,fetch_error,created_at";
+  "id,platform,storage_provider,source_url,external_id,source_ref,pending_title,cover_ref,status,fetched_at,fetch_error,created_at,fetched_title:auto_fetched_meta->>title,fetched_cover:auto_fetched_meta->>pic,fetched_author:auto_fetched_meta->>ownerName,fetched_duration:auto_fetched_meta->duration";
 
 const publishedVideoColumns =
   "id,submission_id,platform,storage_provider,source_url,embed_url,playback_ref,title,cover_url,author_name,view_count,like_count,category_id,published_at,created_at";

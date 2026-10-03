@@ -10,13 +10,13 @@ export default function SubmissionDetailLoading() {
         <div className="admin-skeleton h-7 w-20" />
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-4 admin-card p-4">
           <div className="space-y-3 border-b border-border pb-3">
             <div className="admin-skeleton h-3 w-16" />
             <div className="admin-skeleton h-6 w-40" />
           </div>
-          <div className="grid gap-4 md:grid-cols-[180px_1fr]">
+          <div className="space-y-4">
             <div className="admin-skeleton aspect-video w-full" />
             <div className="space-y-3">
               <div className="admin-skeleton h-5 w-3/4" />
