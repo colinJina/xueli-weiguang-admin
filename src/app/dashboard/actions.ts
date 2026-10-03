@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { requireAdminForAction as requireAdmin } from "@/lib/admin/auth";
+import { insertDictionaryRecord } from "@/lib/review/dictionary-write";
 import {
   deletePublishedVideoRecord,
   type DeletePublishedVideoSupabaseClient,
@@ -536,13 +537,12 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
       const manualColorHex = getStringField(formData, "manualColorHex");
       const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
       const familyId = normalizeToneFamilyId(formData.get("familyId"));
-      ({ error } = await supabase
-        .from("tones")
-        .insert({ color_hex: colorHex, family_id: familyId, name }));
+      ({ error } = await insertDictionaryRecord(supabase, "tones",
+        { color_hex: colorHex, family_id: familyId, name }));
     } else if (kind === "tone_families") {
       const manualColorHex = getStringField(formData, "manualColorHex");
       const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-      ({ error } = await supabase.from("tone_families").insert({
+      ({ error } = await insertDictionaryRecord(supabase, "tone_families", {
         color_hex: colorHex,
         is_active: true,
         key: normalizeToneFamilyKey(formData.get("key")),
@@ -550,9 +550,8 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
         sort_order: normalizeSortOrder(formData.get("sortOrder")),
       }));
     } else {
-      ({ error } = await supabase
-        .from(kind)
-        .insert({ name: normalizeDictionaryName(formData.get("name")), ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}) }));
+      ({ error } = await insertDictionaryRecord(supabase, kind,
+        { name: normalizeDictionaryName(formData.get("name")), ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}) }));
     }
 
     throwDictionaryError(error);

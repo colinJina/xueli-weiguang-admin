@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 
-import { approveSubmission, rejectSubmission, retryMetadataFetch } from "@/app/dashboard/actions";
+import { rejectSubmission, retryMetadataFetch } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
 import { PendingButton } from "@/components/dashboard/pending-button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { SubmissionCover } from "@/components/dashboard/submission-cover";
+import { SubmissionReviewForm } from "@/components/dashboard/submission-review-form";
 import { loadAdminPageData } from "@/lib/admin/auth";
 import {
   ensureSubmissionMetadata,
@@ -129,42 +130,15 @@ export default async function SubmissionDetailPage({
         </div>
 
         <div className="space-y-4">
-          <form action={approveSubmission} className="space-y-4 admin-card p-4">
-            <input name="submissionId" type="hidden" value={submission.id} />
-            <div className="border-b border-border pb-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-subtle">通过</p>
-              <h2 className="mt-2 text-lg font-semibold">发布到档案</h2>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-subtle">分类</span>
-              <select className="admin-input" disabled={!canApprove} name="categoryId" required>
-                <option value="">选择分类</option>
-                {dictionaries.categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <CheckboxGroup items={dictionaries.tags} label="标签，最多 4 个" name="tagIds" />
-            <ToneColorGroup items={dictionaries.tones} label="色调，最多 3 个" name="toneIds" />
-
-            <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-subtle">审核备注</span>
-              <textarea className="admin-input h-auto min-h-24 py-2" name="reviewNote" />
-            </label>
-
-            <PendingButton className="admin-button w-full" disabled={!canApprove} pendingText="发布中…">
-              通过审核
-            </PendingButton>
-            {!canApprove ? (
-              <p className="text-xs text-subtle">
-                {getApprovalDisabledMessage(submission, isExternal, isCos)}
-              </p>
-            ) : null}
-          </form>
+          <SubmissionReviewForm
+            canApprove={canApprove}
+            dictionaries={dictionaries}
+            disabledMessage={getApprovalDisabledMessage(submission, isExternal, isCos)}
+            isExternal={isExternal}
+            isPending={submission.status === "pending"}
+            key={submission.id}
+            submissionId={submission.id}
+          />
 
           <form action={rejectSubmission} className="space-y-4 admin-card p-4">
             <input name="submissionId" type="hidden" value={submission.id} />
@@ -325,82 +299,4 @@ function formatFileSize(value: number | string | null) {
   }
 
   return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function CheckboxGroup({
-  items,
-  label,
-  name,
-}: {
-  items: Array<{ id: string; name: string }>;
-  label: string;
-  name: string;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs uppercase tracking-[0.16em] text-subtle">{label}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {items.length ? (
-          items.map((item) => (
-            <label className="flex items-center gap-2 border border-border bg-panel px-3 py-2" key={item.id}>
-              <input className="h-4 w-4 accent-white" name={name} type="checkbox" value={item.id} />
-              <span className="text-sm text-muted">{item.name}</span>
-            </label>
-          ))
-        ) : (
-          <p className="text-sm text-muted">暂无条目。</p>
-        )}
-      </div>
-    </fieldset>
-  );
-}
-
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-function ToneColorGroup({
-  items,
-  label,
-  name,
-}: {
-  items: Array<{ color_hex?: string | null; family_name?: string | null; id: string; name: string }>;
-  label: string;
-  name: string;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs uppercase tracking-[0.16em] text-subtle">{label}</legend>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {items.length ? (
-          items.map((item) => (
-            <label
-              className="flex cursor-pointer flex-col items-center gap-2 border border-border bg-panel px-3 py-3 transition hover:border-muted"
-              key={item.id}
-            >
-              <input className="peer sr-only" name={name} type="checkbox" value={item.id} />
-              <span
-                aria-hidden="true"
-                className="h-12 w-12 rounded-full border border-borderStrong shadow-[0_0_0_4px_rgba(255,255,255,0.04)] transition peer-checked:scale-95 peer-checked:border-foreground peer-checked:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
-                style={{ backgroundColor: getToneColor(item) }}
-              />
-              <span className="max-w-full truncate text-center text-xs text-muted peer-checked:text-foreground">
-                {item.name}
-              </span>
-              {item.family_name ? (
-                <span className="max-w-full truncate text-center text-[0.68rem] text-subtle">
-                  {item.family_name}
-                </span>
-              ) : null}
-            </label>
-          ))
-        ) : (
-          <p className="text-sm text-muted">暂无条目。</p>
-        )}
-      </div>
-    </fieldset>
-  );
-}
-
-function getToneColor(item: { color_hex?: string | null; name: string }) {
-  const color = item.color_hex ?? item.name;
-  return HEX_COLOR_PATTERN.test(color) ? color : "#D4D4D4";
 }
