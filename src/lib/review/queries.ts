@@ -19,7 +19,6 @@ import type {
   SubmissionStatus,
   SubmissionStatusFilter,
   SubmissionStorageProviderKind,
-  ToneFamilyItem,
 } from "@/lib/review/types";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -269,55 +268,28 @@ export async function listDictionaryItems(supabase: SupabaseClient, table: "cate
   return (data ?? []) as unknown as DictionaryItem[];
 }
 
-export async function listToneFamilies(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("tone_families")
-    .select("id,key,name,color_hex,sort_order,is_active,created_at")
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
+export async function listToneItems(supabase: SupabaseClient) {
+  const items: DictionaryItem[] = [];
+  const pageSize = 500;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("tones")
+      .select("id,name,color_hex,created_at").order("name").order("id")
+      .range(from, from + pageSize - 1);
+    if (error?.code === "PGRST103") {return items;}
+    if (error) {throw new Error(error.message);}
+    const page = (data ?? []) as DictionaryItem[];
+    items.push(...page);
+    if (page.length < pageSize) {return items;}
   }
-
-  return (data ?? []) as ToneFamilyItem[];
-}
-
-export async function listToneItems(
-  supabase: SupabaseClient,
-  families?: ToneFamilyItem[] | Promise<ToneFamilyItem[]>,
-) {
-  const [tonesResult, resolvedFamilies] = await Promise.all([
-    supabase
-      .from("tones")
-      .select("id,name,color_hex,family_id,created_at")
-      .order("name", { ascending: true }),
-    families ?? listToneFamilies(supabase),
-  ]);
-
-  if (tonesResult.error) {
-    throw new Error(tonesResult.error.message);
-  }
-
-  const tones = (tonesResult.data ?? []) as DictionaryItem[];
-  const familyNameById = new Map(resolvedFamilies.map((family) => [family.id, family.name]));
-
-  return tones.map((tone) => ({
-    ...tone,
-    family_name: tone.family_id ? (familyNameById.get(tone.family_id) ?? null) : null,
-  }));
 }
 
 export async function listAllDictionaries(supabase: SupabaseClient) {
-  const familiesPromise = listToneFamilies(supabase);
-  const [categories, tags, toneFamilies, tones] = await Promise.all([
+  const [categories, tags] = await Promise.all([
     listDictionaryItems(supabase, "categories"),
     listDictionaryItems(supabase, "tags"),
-    familiesPromise,
-    listToneItems(supabase, familiesPromise),
   ]);
 
-  return { categories, tags, toneFamilies, tones };
+  return { categories, tags };
 }
 
 export async function listHomeHeroFeatureRequests(supabase: SupabaseClient, {

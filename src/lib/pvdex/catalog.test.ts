@@ -30,7 +30,7 @@ const sourceRecord = {
   colors: [{ hex: "#abcdef", percentage: 0.5, order: 0 }],
 };
 const submission = { platform: "bilibili", storage_provider: "bilibili", external_id: "BV1xx411c7mD" };
-const emptyDictionaries = { categories: [], tags: [], tones: [] };
+const emptyDictionaries = { categories: [], tags: [] };
 
 describe("PVDex directory parsing", () => {
   it("parses JSON strings and retains only review and matching data", () => {

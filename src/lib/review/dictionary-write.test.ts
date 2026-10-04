@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { createOrReuseReviewDictionaryItem, insertDictionaryRecord } from "./dictionary-write";
 import type { DictionaryItem } from "@/lib/review/types";
 
-const familyId = "c1d603d9-0866-47e4-a37f-70ee2c5ad414";
 const item = (overrides: Partial<DictionaryItem> = {}): DictionaryItem => ({
   id: "dictionary-item", name: "手绘", created_at: "2026-10-03T00:00:00Z", ...overrides,
 });
@@ -45,17 +44,19 @@ describe("review dictionary writes", () => {
     ])), { kind: "tags", name: "motion" })).rejects.toThrow("多个同名标签");
     await expect(createOrReuseReviewDictionaryItem(client(query([
       item({ color_hex: "#ABCDEF" }), item({ id: "second", color_hex: "#abcdef" }),
-    ])), { kind: "tones", name: "", colorHex: "abcdef", familyId }))
+    ])), { kind: "tones", name: "", colorHex: "abcdef" }))
       .rejects.toThrow("多个相同色值");
   });
 
   it("reuses colors only by HEX, regardless of the proposed name", async () => {
-    const existing = item({ name: "蓝灰", color_hex: "#abcdef", family_id: familyId });
+    const existing = item({ name: "蓝灰", color_hex: "#ABCDEF" });
     const read = query([existing]);
     await expect(createOrReuseReviewDictionaryItem(client(read), {
-      kind: "tones", name: "其他名称", colorHex: "ABCDEF", familyId,
+      kind: "tones", name: "其他名称", colorHex: "ABCDEF",
     })).resolves.toEqual({ item: existing, reused: true });
     expect(read.insert).not.toHaveBeenCalled();
+    expect(read.eq).toHaveBeenCalledWith("color_hex", "#ABCDEF");
+    expect(read.range).not.toHaveBeenCalled();
   });
 
   it("creates a trimmed tag and returns the inserted row", async () => {
@@ -67,40 +68,18 @@ describe("review dictionary writes", () => {
     expect(write.select).toHaveBeenCalledWith("id,name,created_at");
   });
 
-  it("defaults a new tone name to normalized HEX and requires an active family", async () => {
-    const inserted = item({ name: "#ABCDEF", color_hex: "#ABCDEF", family_id: familyId });
-    const family = query({ id: familyId, name: "蓝", is_active: true });
+  it("creates colors directly with HEX names and no family lookup", async () => {
+    const inserted = item({ name: "#ABCDEF", color_hex: "#ABCDEF" });
     const write = query(inserted);
-    const result = await createOrReuseReviewDictionaryItem(client(query([]), family, write), {
-      kind: "tones", name: "  ", colorHex: "abcdef", familyId,
+    const supabase = client(query([]), write);
+    const result = await createOrReuseReviewDictionaryItem(supabase, {
+      kind: "tones", name: "  ", colorHex: "abcdef",
     });
-    expect(result).toEqual({ item: { ...inserted, family_name: "蓝" }, reused: false });
-    expect(family.eq).toHaveBeenCalledWith("id", familyId);
-    expect(write.insert).toHaveBeenCalledWith({ name: "#ABCDEF", color_hex: "#ABCDEF", family_id: familyId });
-  });
-
-  it.each([null, { id: familyId, name: "蓝", is_active: false }])("blocks a missing or inactive family", async (family) => {
-    const write = query(item());
-    await expect(createOrReuseReviewDictionaryItem(client(query([]), query(family), write), {
-      kind: "tones", name: "蓝", colorHex: "#ABCDEF", familyId,
-    })).rejects.toThrow("不存在或已停用");
-    expect(write.insert).not.toHaveBeenCalled();
-  });
-
-  it.each(["", "not-a-uuid"])("blocks invalid family identifiers", async (invalidFamilyId) => {
-    const supabase = client(query([]));
-    await expect(createOrReuseReviewDictionaryItem(supabase, {
-      kind: "tones", name: "蓝", colorHex: "#ABCDEF", familyId: invalidFamilyId,
-    })).rejects.toThrow(/色族/);
-    expect(supabase.from).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not reuse a same-name tone with a different color", async () => {
-    const write = query(item());
-    await expect(createOrReuseReviewDictionaryItem(client(query([item({ name: "蓝", color_hex: "#000000" })]), write), {
-      kind: "tones", name: "蓝", colorHex: "#ABCDEF", familyId,
-    })).rejects.toThrow("其他色值");
-    expect(write.insert).not.toHaveBeenCalled();
+    expect(result).toEqual({ item: inserted, reused: false });
+    expect(supabase.from).toHaveBeenNthCalledWith(1, "tones");
+    expect(supabase.from).toHaveBeenNthCalledWith(2, "tones");
+    expect(supabase.from).toHaveBeenCalledTimes(2);
+    expect(write.insert).toHaveBeenCalledWith({ name: "#ABCDEF", color_hex: "#ABCDEF" });
   });
 
   it("re-reads and reuses a concurrently inserted tag after 23505", async () => {
@@ -111,19 +90,18 @@ describe("review dictionary writes", () => {
   });
 
   it("re-reads an exact color after concurrent creation", async () => {
-    const existing = item({ name: "蓝", color_hex: "#ABCDEF", family_id: familyId });
+    const existing = item({ name: "蓝", color_hex: "#ABCDEF" });
     await expect(createOrReuseReviewDictionaryItem(client(
-      query([]), query({ name: "蓝", is_active: true }),
-      query(null, { code: "23505", message: "duplicate" }), query([existing]),
-    ), { kind: "tones", name: "蓝", colorHex: "#abcdef", familyId }))
+      query([]), query(null, { code: "23505", message: "duplicate" }), query([existing]),
+    ), { kind: "tones", name: "蓝", colorHex: "#abcdef" }))
       .resolves.toEqual({ item: existing, reused: true });
   });
 
   it("never mistakes an unrelated uniqueness conflict for successful reuse", async () => {
     await expect(createOrReuseReviewDictionaryItem(client(
-      query([]), query({ name: "蓝", is_active: true }), query(null, { code: "23505", message: "duplicate" }),
+      query([]), query(null, { code: "23505", message: "duplicate" }),
       query([item({ name: "蓝", color_hex: "#000000" })]),
-    ), { kind: "tones", name: "蓝", colorHex: "#ABCDEF", familyId })).rejects.toThrow("已存在");
+    ), { kind: "tones", name: "蓝", colorHex: "#ABCDEF" })).rejects.toThrow("已存在");
   });
 
   it("propagates read and insertion failures", async () => {
@@ -156,7 +134,7 @@ describe("review dictionary writes", () => {
     const supabase = client();
     await expect(createOrReuseReviewDictionaryItem(supabase, { kind: "tags", name: "字".repeat(41) }))
       .rejects.toThrow("40");
-    await expect(createOrReuseReviewDictionaryItem(supabase, { kind: "tones", name: "蓝", colorHex: "invalid", familyId }))
+    await expect(createOrReuseReviewDictionaryItem(supabase, { kind: "tones", name: "蓝", colorHex: "invalid" }))
       .rejects.toThrow("HEX");
     expect(supabase.from).not.toHaveBeenCalled();
   });

@@ -24,7 +24,7 @@ describe("PVDex suggestion route", () => {
     vi.clearAllMocks();
     mocks.getAdminContext.mockResolvedValue({ supabase: "user-scoped-client", user: { id: "admin" }, isAdmin: true });
     mocks.getSubmission.mockResolvedValue(submission);
-    mocks.dictionaries.mockResolvedValue({ categories: [], tags: [], tones: [] });
+    mocks.dictionaries.mockResolvedValue({ categories: [], tags: [] });
     mocks.getSuggestions.mockResolvedValue(matched);
   });
 
@@ -68,7 +68,7 @@ describe("PVDex suggestion route", () => {
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(await response.json()).toEqual(matched);
     expect(mocks.getSubmission).toHaveBeenCalledWith("user-scoped-client", submissionId);
-    expect(mocks.getSuggestions).toHaveBeenCalledWith(submission, { categories: [], tags: [], tones: [] });
+    expect(mocks.getSuggestions).toHaveBeenCalledWith(submission, { categories: [], tags: [] });
     expect(submission.auto_fetched_meta).toEqual({});
   });
 

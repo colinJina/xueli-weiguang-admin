@@ -1,5 +1,7 @@
 # PVDex 辅助审核第一版
 
+> 本文保留第一版的实现与验证记录。当前审核已升级为最多 5 色的视频色板，取消人工色族；采用建议补充剩余颜色名额，发布使用新的色板 RPC。当前规则与迁移流程见 `AGENTS.md`、`system-context.md` 和 `realtime-color-palette-database.md`。
+
 本地分支：`codex/pvdex-review-v1`。本版增加投稿详情页的辅助建议，不改数据库结构、原平台元数据获取或发布 RPC。
 
 ## 使用流程

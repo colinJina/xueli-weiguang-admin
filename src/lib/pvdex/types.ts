@@ -19,8 +19,6 @@ export type PvdexSuggestionResult =
         hex: string;
         percentage: number;
         order: number;
-        item: DictionaryItem | null;
-        ambiguous: boolean;
       }>;
       analysisStatus: string | null;
     }

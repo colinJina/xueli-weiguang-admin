@@ -6,18 +6,15 @@ import { useEffect, useState } from "react";
 import { batchApproveSubmissions, batchRejectSubmissions } from "@/app/dashboard/actions";
 import { CoverPreview } from "@/components/dashboard/cover-preview";
 import { PendingButton } from "@/components/dashboard/pending-button";
+import { ReviewPaletteEditor } from "@/components/dashboard/review-palette-editor";
 import { StatusBadge } from "@/components/dashboard/status-badge";
+import type { ReviewPaletteColor } from "@/lib/review/palette";
 import type { SubmissionBatchListItem } from "@/lib/review/submission-list";
 import type { SubmissionStatusFilter } from "@/lib/review/types";
 
 type DictionaryOption = {
   id: string;
   name: string;
-};
-
-type ToneOption = DictionaryOption & {
-  color_hex?: string | null;
-  family_name?: string | null;
 };
 
 type SubmissionsBatchListProps = {
@@ -29,21 +26,17 @@ type SubmissionsBatchListProps = {
 type ReviewOptions = {
   categories: DictionaryOption[];
   tags: DictionaryOption[];
-  tones: ToneOption[];
 };
 
 const MAX_TAGS = 4;
-const MAX_TONES = 3;
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
 export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsBatchListProps) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<ReadonlySet<string>>(new Set());
-  const [selectedToneIds, setSelectedToneIds] = useState<ReadonlySet<string>>(new Set());
+  const [palette, setPalette] = useState<ReviewPaletteColor[]>([]);
   const [options, setOptions] = useState<ReviewOptions | null>(null);
   const [optionsError, setOptionsError] = useState("");
   const [optionsAttempt, setOptionsAttempt] = useState(0);
-  const { categories = [], tags = [], tones = [] } = options ?? {};
+  const { categories = [], tags = [] } = options ?? {};
 
   const pendingIds = items
     .filter((item) => item.status === "pending")
@@ -218,7 +211,7 @@ export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsB
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p aria-live="polite" className="text-sm font-medium text-foreground">已选 {selectedCount} 条待审核投稿</p>
-                  <p className="mt-1 text-xs text-subtle">请逐条核对内容；所选投稿将使用相同分类、标签和色调。</p>
+                  <p className="mt-1 text-xs text-subtle">请逐条核对内容；所选投稿将使用相同分类、标签和视频色板。</p>
                 </div>
                 <button
                   className="text-xs text-subtle underline-offset-4 transition hover:text-foreground hover:underline"
@@ -231,7 +224,7 @@ export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsB
 
               {!options ? (
                 <div aria-live="polite" className="flex items-center gap-3 text-sm text-muted">
-                  <span>{optionsError || "正在加载分类、标签和色调…"}</span>
+                  <span>{optionsError || "正在加载分类和标签…"}</span>
                   {optionsError ? (
                     <button className="admin-secondary-button" onClick={() => setOptionsAttempt((attempt) => attempt + 1)} type="button">
                       重试
@@ -277,9 +270,10 @@ export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsB
                 </div>
               </div>
 
+              <ReviewPaletteEditor onChange={setPalette} palette={palette} />
               <details className="admin-card">
                 <summary className="cursor-pointer px-3 py-2 text-xs uppercase tracking-[0.16em] text-subtle transition hover:text-foreground">
-                  标签 / 色调（可选，应用到全部选中项）
+                  标签（可选，应用到全部选中项）
                 </summary>
                 <div className="grid gap-4 border-t border-border p-3 lg:grid-cols-2">
                   <fieldset className="space-y-2">
@@ -320,55 +314,7 @@ export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsB
                     </div>
                   </fieldset>
 
-                  <fieldset className="space-y-2">
-                    <legend className="text-xs uppercase tracking-[0.16em] text-subtle">
-                      色调，最多 {MAX_TONES} 个
-                    </legend>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {tones.length ? (
-                        tones.map((tone) => {
-                          const checked = selectedToneIds.has(tone.id);
-                          const disabled = !checked && selectedToneIds.size >= MAX_TONES;
 
-                          return (
-                            <label
-                              className={`flex cursor-pointer flex-col items-center gap-2 border border-border bg-panel px-2 py-3 transition hover:border-muted ${
-                                disabled ? "cursor-not-allowed opacity-40" : ""
-                              }`}
-                              key={tone.id}
-                            >
-                              <input
-                                checked={checked}
-                                className="peer sr-only"
-                                disabled={disabled}
-                                name="toneIds"
-                                onChange={() =>
-                                  toggleLimitedId(setSelectedToneIds, tone.id, MAX_TONES)
-                                }
-                                type="checkbox"
-                                value={tone.id}
-                              />
-                              <span
-                                aria-hidden="true"
-                                className="h-9 w-9 rounded-full border border-borderStrong shadow-[0_0_0_4px_rgba(255,255,255,0.04)] transition peer-checked:scale-95 peer-checked:border-foreground peer-checked:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
-                                style={{ backgroundColor: getToneColor(tone) }}
-                              />
-                              <span className="max-w-full truncate text-center text-xs text-muted peer-checked:text-foreground">
-                                {tone.name}
-                              </span>
-                              {tone.family_name ? (
-                                <span className="max-w-full truncate text-center text-[0.68rem] text-subtle">
-                                  {tone.family_name}
-                                </span>
-                              ) : null}
-                            </label>
-                          );
-                        })
-                      ) : (
-                        <p className="text-sm text-muted">暂无条目。</p>
-                      )}
-                    </div>
-                  </fieldset>
                 </div>
               </details>
             </div>
@@ -377,9 +323,4 @@ export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsB
       ) : null}
     </form>
   );
-}
-
-function getToneColor(tone: { color_hex?: string | null; name: string }) {
-  const color = tone.color_hex ?? tone.name;
-  return HEX_COLOR_PATTERN.test(color) ? color : "#D4D4D4";
 }

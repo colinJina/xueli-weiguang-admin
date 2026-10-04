@@ -121,7 +121,7 @@ export async function refreshPvdexCatalog(): Promise<void> {
 
 export async function getPvdexSuggestions(
   submission: Pick<SubmissionRow, "platform" | "storage_provider" | "external_id">,
-  dictionaries: { categories: DictionaryItem[]; tags: DictionaryItem[]; tones: DictionaryItem[] },
+  dictionaries: { categories: DictionaryItem[]; tags: DictionaryItem[] },
 ): Promise<PvdexSuggestionResult> {
   const key = submissionVideoKey(submission);
   if (!key) {

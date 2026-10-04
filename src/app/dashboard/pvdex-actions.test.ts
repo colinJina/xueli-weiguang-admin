@@ -31,7 +31,7 @@ describe("PVDex server actions", () => {
     mocks.requireAdmin.mockResolvedValue({ supabase: "user-scoped-client", user: { id: "admin" } });
     mocks.getSubmission.mockResolvedValue(submission);
     mocks.createItem.mockResolvedValue({ item, reused: false });
-    mocks.dictionaries.mockResolvedValue({ categories: [], tags: [], tones: [] });
+    mocks.dictionaries.mockResolvedValue({ categories: [], tags: [] });
     mocks.getSuggestions.mockResolvedValue({ status: "not_found", message: "没有匹配" });
     mocks.refreshCatalog.mockResolvedValue(undefined);
   });
@@ -86,17 +86,24 @@ describe("PVDex server actions", () => {
   });
 
   it("returns validation/write errors without navigation or losing the client form", async () => {
-    mocks.createItem.mockRejectedValue(new Error("色族不存在或已停用，请重新选择。"));
-    expect(await createPvdexDictionaryItem({ ...input, kind: "tones", colorHex: "#ABCDEF", familyId: "invalid" }))
-      .toEqual({ ok: false, error: "色族不存在或已停用，请重新选择。" });
+    mocks.createItem.mockRejectedValue(new Error("名称已存在，请重新选择。"));
+    expect(await createPvdexDictionaryItem(input))
+      .toEqual({ ok: false, error: "名称已存在，请重新选择。" });
     expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+
+  it("rejects obsolete color dictionary creation requests", async () => {
+    const legacyInput = { ...input, kind: "tones" } as unknown as Parameters<typeof createPvdexDictionaryItem>[0];
+    expect(await createPvdexDictionaryItem(legacyInput))
+      .toEqual({ ok: false, error: "建议面板仅支持创建标签，颜色直接加入视频色板。" });
+    expect(mocks.createItem).not.toHaveBeenCalled();
   });
 
   it("refreshes only the public directory and reads the real submission", async () => {
     expect(await refreshPvdexSuggestions(submissionId)).toEqual({ status: "not_found", message: "没有匹配" });
     expect(mocks.getSubmission).toHaveBeenCalledWith("user-scoped-client", submissionId);
     expect(mocks.refreshCatalog).toHaveBeenCalledOnce();
-    expect(mocks.getSuggestions).toHaveBeenCalledWith(submission, { categories: [], tags: [], tones: [] });
+    expect(mocks.getSuggestions).toHaveBeenCalledWith(submission, { categories: [], tags: [] });
     expect(mocks.createItem).not.toHaveBeenCalled();
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });

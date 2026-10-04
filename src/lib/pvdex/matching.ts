@@ -90,7 +90,7 @@ function sourceLink(id: string) {
 export function matchPvdexCatalog(
   catalog: PvdexCatalog,
   key: string,
-  dictionaries: { categories: DictionaryItem[]; tags: DictionaryItem[]; tones: DictionaryItem[] },
+  dictionaries: { categories: DictionaryItem[]; tags: DictionaryItem[] },
 ): PvdexSuggestionResult {
   const matches = catalog.entries.filter((entry) => entry.primaryKey === key || entry.alternateKeys.includes(key));
   if (!matches.length) {
@@ -121,10 +121,7 @@ export function matchPvdexCatalog(
     categories,
     tags: entry.tags.filter((name) => !recognizedCategories.has(normalizePvdexName(name)))
       .map((name) => ({ name, ...matchDictionary(dictionaries.tags, name) })),
-    colors: entry.colors.map((color) => {
-      const matches = dictionaries.tones.filter((item) => normalizePvdexHex(item.color_hex) === color.hex);
-      return { ...color, item: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
-    }),
+    colors: entry.colors,
     analysisStatus: entry.analysisStatus,
   };
 }

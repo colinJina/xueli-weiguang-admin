@@ -7,7 +7,7 @@ import type { DictionaryItem } from "@/lib/review/types";
 const dictionary = (id: string, name: string, color_hex?: string): DictionaryItem => ({
   id, name, color_hex, created_at: "2026-10-03T00:00:00.000Z",
 });
-const emptyDictionaries = { categories: [], tags: [], tones: [] };
+const emptyDictionaries = { categories: [], tags: [] };
 const catalog: PvdexCatalog = {
   fetchedAt: "2026-10-03T00:00:00.000Z",
   entries: [{
@@ -95,7 +95,6 @@ describe("PVDex suggestions", () => {
     const result = matchPvdexCatalog(catalog, "bilibili:BV1xx411c7mD", {
       categories: [dictionary("cat-1", " 歌曲pv ")],
       tags: [dictionary("tag-1", "3dcg")],
-      tones: [dictionary("tone-1", "蓝", "#abcdef")],
     });
     expect(result.status).toBe("matched");
     if (result.status !== "matched") { return; }
@@ -104,22 +103,20 @@ describe("PVDex suggestions", () => {
       { name: "3DCG", item: dictionary("tag-1", "3dcg"), ambiguous: false },
       { name: "黑白", item: null, ambiguous: false },
     ]);
-    expect(result.colors[0].item?.id).toBe("tone-1");
+    expect(result.colors).toEqual(catalog.entries[0].colors);
     expect(result.analysisStatus).toBe("done");
   });
 
-  it("never arbitrarily selects duplicate local categories, tag names or HEX values", () => {
+  it("never arbitrarily selects duplicate local categories or tag names", () => {
     const result = matchPvdexCatalog(catalog, "bilibili:BV1xx411c7mD", {
       categories: [dictionary("cat-1", "歌曲PV"), dictionary("cat-2", "歌曲pv")],
       tags: [dictionary("tag-1", "3DCG"), dictionary("tag-2", "3dcg")],
-      tones: [dictionary("tone-1", "蓝", "#ABCDEF"), dictionary("tone-2", "青", "abcdef")],
     });
     if (result.status !== "matched") { throw new Error("Expected a match"); }
     expect(result.categoryId).toBeNull();
     expect(result.categories).toHaveLength(2);
     expect(result.tags[0]).toEqual({ name: "3DCG", item: null, ambiguous: true });
-    expect(result.colors[0].item).toBeNull();
-    expect(result.colors[0].ambiguous).toBe(true);
+    expect(result.colors).toEqual(catalog.entries[0].colors);
   });
 
   it("requires choosing when multiple existing categories are candidates", () => {

@@ -19,7 +19,7 @@ C:\Users\31744\Desktop\xueli-weiguang
 - 审核 Supabase 中的用户投稿
 - 仅在管理员审核时获取 Bilibili / YouTube 外链元数据
 - 管理分类、标签和色调
-- 管理前台筛选色族，并维护具体色调与色族归属
+- 确认视频的具体 HEX 色板；前台固定圆点按 HEX 自动分组
 - 将审核通过的投稿发布到 `videos`
 - 拒绝无效投稿
 
@@ -121,7 +121,6 @@ COS_UPLOAD_MAX_BYTES
 - `categories`
 - `tags`
 - `tones`
-- `tone_families`
 - `video_tags`
 - `video_tones`
 
@@ -160,8 +159,11 @@ COS_UPLOAD_MAX_BYTES
 
 - 必须选择一个分类。
 - 最多选择 4 个标签。
-- 最多选择 3 个色调。
-- 每个具体色调必须归属一个色族，前台 Archive 按色族筛选，审核发布仍写入具体 `tone_id`。
+- 最多选择 5 个具体颜色，直接选色或输入 HEX，无需名称和人工色族。
+- `tones.color_hex` 统一大写并按 HEX 复用；新增颜色自动以 HEX 命名。
+- `video_tones.percentage` 可空且范围 0–1，人工或历史颜色不虚构占比；`sort_order` 范围 0–4。
+- 发布使用 `approve_submission_with_palette` / `approve_cos_submission_with_palette`，颜色复用、发布和关联在同一事务完成，保持管理员鉴权、RLS 和 SECURITY INVOKER。
+- 固定圆点是预设，自动分类与精细匹配由数据库统一执行，不存储颜色归属；按 `docs/realtime-color-palette-database.md` 分阶段迁移。删除旧结构前完成重复 HEX 预检、依赖核对和可恢复快照，禁止 DROP CASCADE。
 - 通过会创建一条 `videos` 记录，并写入 `video_tags` / `video_tones` 关系记录。
 - 拒绝只会把投稿标记为 `rejected`，并在有备注时保存备注。
 

@@ -30,7 +30,7 @@ vi.mock("@/lib/review/queries", () => ({
 }));
 vi.mock("@/lib/storage/cos/publish", () => ({ publishCosSubmission: vi.fn() }));
 
-import { approveSubmission, batchApproveSubmissions, batchRejectSubmissions, rejectSubmission, updateDictionaryItem, updateToneItem, updateToneFamilyItem, deleteDictionaryItem, applyHomeHeroFeatureRequest, rejectHomeHeroFeatureRequest, addDictionaryItem } from "./actions";
+import { approveSubmission, batchApproveSubmissions, batchRejectSubmissions, rejectSubmission, updateDictionaryItem, updateToneItem, deleteDictionaryItem, applyHomeHeroFeatureRequest, rejectHomeHeroFeatureRequest, addDictionaryItem } from "./actions";
 
 function queryResult(data: unknown, error: { message: string; code?: string } | null = null, count = 0) {
   const result = { data, error, count };
@@ -77,9 +77,11 @@ describe("single submission publication regression", () => {
     for (const id of ["tag-1", "tag-2", "tag-3", "tag-4"]) {
       form.append("tagIds", id);
     }
-    for (const id of ["tone-1", "tone-2", "tone-3"]) {
-      form.append("toneIds", id);
-    }
+    form.set("palette", JSON.stringify([
+      { hex: "abcdef", percentage: 0.5 },
+      { hex: "#123456", percentage: null },
+      { hex: "#FFFFFF", percentage: null },
+    ]));
     form.set("reviewNote", "  已核实 PVDex 建议  ");
     // Suggestions are client-side candidates. Extra request fields must never
     // replace source metadata or become extra publish RPC arguments.
@@ -102,10 +104,14 @@ describe("single submission publication regression", () => {
     const originalMetadata = JSON.stringify(row.auto_fetched_meta);
     await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
     expect(mocks.getSubmission).toHaveBeenCalledWith({ from: mocks.from, rpc: mocks.rpc }, "submission");
-    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission", {
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission_with_palette", {
       p_submission_id: "submission", p_category_id: "category",
       p_tag_ids: ["tag-1", "tag-2", "tag-3", "tag-4"],
-      p_tone_ids: ["tone-1", "tone-2", "tone-3"],
+      p_palette: [
+        { hex: "#ABCDEF", percentage: 0.5 },
+        { hex: "#123456", percentage: null },
+        { hex: "#FFFFFF", percentage: null },
+      ],
       p_review_note: "已核实 PVDex 建议",
     });
     expect(row.auto_fetched_meta).toBe(sourceMetadata);
@@ -120,7 +126,7 @@ describe("single submission publication regression", () => {
   it.each([
     { kind: "category", error: "必须选择分类。" },
     { kind: "tags", error: "最多选择 4 个条目。" },
-    { kind: "tones", error: "最多选择 3 个条目。" },
+    { kind: "colors", error: "色板必须是最多 5 个颜色的列表。" },
   ])("blocks publication before RPC when $kind violates review limits", async ({ kind, error }) => {
     const form = reviewForm();
     if (kind === "category") {
@@ -128,7 +134,7 @@ describe("single submission publication regression", () => {
     } else if (kind === "tags") {
       form.append("tagIds", "tag-5");
     } else {
-      form.append("toneIds", "tone-4");
+      form.set("palette", JSON.stringify(["112233", "223344", "334455", "445566", "556677", "667788"].map((hex) => ({ hex }))));
     }
     await expect(approveSubmission(form)).rejects.toThrow("redirect:");
     expect(mocks.rpc).not.toHaveBeenCalled();
@@ -149,10 +155,14 @@ describe("single submission publication regression", () => {
     // PVDex must neither bypass that procedure nor swallow its rejection.
     mocks.rpc.mockResolvedValue({ data: null, error: { message, code: "22023" } });
     await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
-    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission", {
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission_with_palette", {
       p_submission_id: "submission", p_category_id: "category",
       p_tag_ids: ["tag-1", "tag-2", "tag-3", "tag-4"],
-      p_tone_ids: ["tone-1", "tone-2", "tone-3"], p_review_note: "已核实 PVDex 建议",
+      p_palette: [
+        { hex: "#ABCDEF", percentage: 0.5 },
+        { hex: "#123456", percentage: null },
+        { hex: "#FFFFFF", percentage: null },
+      ], p_review_note: "已核实 PVDex 建议",
     });
     expect(row.auto_fetched_meta).toBe(metadata);
     expect(row.fetched_at).toBe(fetched_at);
@@ -208,9 +218,17 @@ describe("review actions", () => {
   it("reads a batch in one request and retains filter/page after successful publication", async () => {
     const query = queryResult(["a", "b"].map((id) => ({ id, platform: "bilibili", status: "pending", fetched_at: "cached" })));
     mocks.from.mockReturnValue(query);
-    await expect(batchApproveSubmissions(batchForm())).rejects.toThrow("redirect:");
+    const form = batchForm();
+    const palette = ["#112233", "#223344", "#334455", "#445566", "#556677"].map((hex) => ({ hex, percentage: null }));
+    form.set("palette", JSON.stringify(palette));
+    await expect(batchApproveSubmissions(form)).rejects.toThrow("redirect:");
     expect(mocks.from).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    for (const id of ["a", "b"]) {
+      expect(mocks.rpc).toHaveBeenCalledWith("approve_submission_with_palette", {
+        p_submission_id: id, p_category_id: "category", p_tag_ids: [], p_palette: palette, p_review_note: null,
+      });
+    }
     expect(mocks.fetchMetadata).not.toHaveBeenCalled();
     expect(destination().searchParams.get("status")).toBe("all");
     expect(destination().searchParams.get("page")).toBe("2");
@@ -264,7 +282,7 @@ describe("other menu mutations", () => {
   });
   function dictionaryForm() {
     const form = new FormData();
-    for (const [key, value] of Object.entries({ id: "item", name: "雪", key: "snow", familyId: "family", manualColorHex: "#FFFFFF", sortOrder: "2", returnPath: "/dashboard/categories?q=雪" })) {
+    for (const [key, value] of Object.entries({ id: "item", name: "雪", manualColorHex: "#FFFFFF", sortOrder: "2", returnPath: "/dashboard/categories?q=雪" })) {
       form.set(key, value);
     }
     return form;
@@ -279,9 +297,9 @@ describe("other menu mutations", () => {
     expect(mocks.revalidate).toHaveBeenCalledWith("/dashboard/tones");
     expect(mocks.revalidate).toHaveBeenCalledWith("/dashboard/submissions/[id]", "page");
   });
-  it("does not report success for missing dictionary, tone or family rows", async () => {
+  it("does not report success for missing dictionary or tone rows", async () => {
     mocks.from.mockReturnValue(queryResult(null));
-    for (const action of [updateDictionaryItem.bind(null, "tags"), updateToneItem, updateToneFamilyItem]) {
+    for (const action of [updateDictionaryItem.bind(null, "tags"), updateToneItem]) {
       await expect(action(dictionaryForm())).rejects.toThrow("redirect:");
       expect(destination().searchParams.get("error")).toContain("已不存在");
       expect(destination().searchParams.has("notice")).toBe(false);
@@ -292,11 +310,22 @@ describe("other menu mutations", () => {
     await expect(addDictionaryItem("tags", dictionaryForm())).rejects.toThrow("redirect:");
     expect(destination().searchParams.get("error")).toContain("已存在");
   });
-  it("prevents deletion of a family that still has tones", async () => {
+  it("creates a color with a HEX name when the optional name is blank", async () => {
+    const query = queryResult(null);
+    mocks.from.mockReturnValue(query);
+    const form = dictionaryForm();
+    form.set("name", "  ");
+    form.set("manualColorHex", "abcdef");
+    await expect(addDictionaryItem("tones", form)).rejects.toThrow("redirect:");
+    expect(mocks.from).toHaveBeenCalledExactlyOnceWith("tones");
+    expect(query.insert).toHaveBeenCalledWith({ name: "#ABCDEF", color_hex: "#ABCDEF" });
+    expect(destination().searchParams.get("notice")).toBe("条目已添加。");
+  });
+  it("prevents deletion of a color used by videos", async () => {
     const usage = queryResult(null, null, 3);
     mocks.from.mockReturnValue(usage);
-    await expect(deleteDictionaryItem("tone_families", dictionaryForm())).rejects.toThrow("redirect:");
-    expect(destination().searchParams.get("error")).toContain("仍有色调归属");
+    await expect(deleteDictionaryItem("tones", dictionaryForm())).rejects.toThrow("redirect:");
+    expect(destination().searchParams.get("error")).toContain("视频");
     expect(mocks.from).toHaveBeenCalledOnce();
     expect(usage.delete).not.toHaveBeenCalled();
   });

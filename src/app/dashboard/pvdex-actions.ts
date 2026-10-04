@@ -12,7 +12,7 @@ import { getSubmissionById, isExternalSubmission, listAllDictionaries } from "@/
 import { getSafeActionMessage } from "@/lib/review/review-utils";
 import type { DictionaryItem } from "@/lib/review/types";
 
-export type CreatePvdexDictionaryInput = CreateReviewDictionaryInput & { submissionId: string };
+export type CreatePvdexDictionaryInput = Omit<CreateReviewDictionaryInput, "kind" | "colorHex"> & { submissionId: string; kind: "tags" };
 export type CreatePvdexDictionaryResult =
   | { ok: true; item: DictionaryItem; reused: boolean }
   | { ok: false; error: string };
@@ -58,12 +58,15 @@ export async function createPvdexDictionaryItem(
     if (!input || typeof input !== "object") {
       throw new Error("词条参数无效。");
     }
+    if (input.kind !== "tags") {
+      throw new Error("建议面板仅支持创建标签，颜色直接加入视频色板。");
+    }
     await getPendingExternalSubmission(supabase, input.submissionId);
     const { item, reused } = await createOrReuseReviewDictionaryItem(supabase, input);
     if (!reused) {
       // Do not invalidate the active detail page: its unsaved review choices
       // stay in the client component and the action returns the new row.
-      revalidatePath(input.kind === "tags" ? "/dashboard/tags" : "/dashboard/tones");
+      revalidatePath("/dashboard/tags");
       revalidatePath("/dashboard/submissions");
     }
     return { ok: true, item, reused };
