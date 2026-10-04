@@ -50,6 +50,7 @@ export function DashboardSidebar() {
               aria-current={isCurrent ? "page" : undefined}
               href={link.href}
               key={link.href}
+              prefetch={link.href === "/dashboard/submissions" ? false : undefined}
               onNavigate={(event) => {
                 event.preventDefault();
                 navigate(link.href);

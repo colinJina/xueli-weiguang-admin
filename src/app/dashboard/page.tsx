@@ -16,7 +16,7 @@ export default async function DashboardPage() {
           <p className="text-xs uppercase tracking-[0.22em] text-subtle">控制台</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">审核运营概览</h1>
         </div>
-        <Link className="admin-secondary-button" href="/dashboard/submissions">
+        <Link className="admin-secondary-button" href="/dashboard/submissions" prefetch={false}>
           查看投稿
         </Link>
       </div>
@@ -69,7 +69,7 @@ function MetricsLoading() {
 
 function MetricCard({ href, label, value }: Readonly<{ href: string; label: string; value: number }>) {
   return (
-    <Link className="admin-card p-4 transition-colors hover:border-subtle" href={href}>
+    <Link className="admin-card p-4 transition-colors hover:border-subtle" href={href} prefetch={href.startsWith("/dashboard/submissions") ? false : undefined}>
       <p className="text-xs uppercase tracking-[0.18em] text-subtle">{label}</p>
       <p className="mt-4 text-3xl font-semibold">{value}</p>
       <p className="mt-2 text-sm text-muted">查看列表 →</p>

@@ -401,3 +401,60 @@ export async function ensureSubmissionMetadata(
     return { info: null, error: message, fetched: false };
   }
 }
+
+// Call only after admin authorization: fetching metadata also updates submissions.
+export async function ensureSubmissionListMetadata(
+  supabase: SupabaseClient,
+  rows: SubmissionListRow[],
+) {
+  const ids = rows.filter((row) =>
+    row.status === "pending" && isExternalSubmission(row) &&
+    !row.fetch_error && (!row.fetched_at || !row.fetched_title),
+  ).map((row) => row.id);
+
+  if (!ids.length) {
+    return rows;
+  }
+
+  // Recheck the current records in one read so a refreshed cache or an already
+  // reviewed submission is not fetched again based on an older list snapshot.
+  const { data, error } = await supabase
+    .from("submissions")
+    .select(submissionSelectColumns)
+    .in("id", ids);
+  if (error) {
+    throw new Error(error.message);
+  }
+  const submissions = (data ?? []) as SubmissionRow[];
+  const updated = new Map<string, Partial<SubmissionListRow>>();
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < submissions.length) {
+      const submission = submissions[nextIndex++];
+      if (submission.status !== "pending" || !isExternalSubmission(submission)) {
+        continue;
+      }
+
+      try {
+        const { info, error } = await ensureSubmissionMetadata(supabase, submission);
+        updated.set(submission.id, {
+          ...(info ? {
+            fetched_title: info.title,
+            fetched_cover: info.pic,
+            fetched_author: info.ownerName,
+            fetched_duration: info.duration,
+          } : {}),
+          fetched_at: info ? submission.fetched_at ?? new Date().toISOString() : null,
+          fetch_error: error,
+        });
+      } catch (error) {
+        // One unavailable source must not hide the other submissions in the queue.
+        updated.set(submission.id, { fetch_error: getSafeActionMessage(error) });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(4, submissions.length) }, worker));
+  return rows.map((row) => updated.has(row.id) ? { ...row, ...updated.get(row.id) } : row);
+}

@@ -69,7 +69,7 @@ export default async function SubmissionDetailPage({
 
   return (
     <div className="space-y-5">
-      <Link className="inline-flex items-center gap-2 text-sm text-subtle hover:text-foreground" href="/dashboard/submissions"><span aria-hidden="true">←</span> 返回审核队列</Link>
+      <Link className="inline-flex items-center gap-2 text-sm text-subtle hover:text-foreground" href="/dashboard/submissions" prefetch={false}><span aria-hidden="true">←</span> 返回审核队列</Link>
       <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-end">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.22em] text-subtle">投稿审核</p>

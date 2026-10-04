@@ -36,6 +36,7 @@ export function SubmissionStatusNavigation({
               }`}
               href={buildSubmissionsHref(tab.value)}
               key={tab.value}
+              prefetch={false}
               onNavigate={(event) => {
                 event.preventDefault();
                 startTransition(() => {

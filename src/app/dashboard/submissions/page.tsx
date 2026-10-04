@@ -6,6 +6,7 @@ import { SubmissionStatusNavigation } from "@/components/dashboard/submission-st
 import { SubmissionsBatchList } from "@/components/dashboard/submissions-batch-list";
 import { loadAdminPageData } from "@/lib/admin/auth";
 import {
+  ensureSubmissionListMetadata,
   getSubmissionStorageProvider,
   listSubmissionsPage,
 } from "@/lib/review/queries";
@@ -32,9 +33,10 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
   const { error, notice, page: pageParam, status: statusParam } = await searchParams;
   const status = coerceSubmissionStatus(statusParam);
   const page = coerceSubmissionPage(pageParam);
-  const { rows, total } = await loadAdminPageData((supabase) =>
-    listSubmissionsPage(supabase, { status, page, pageSize: PAGE_SIZE }),
-  );
+  const { rows, total, supabase } = await loadAdminPageData(async (supabase) => ({
+    ...await listSubmissionsPage(supabase, { status, page, pageSize: PAGE_SIZE }),
+    supabase,
+  }));
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (page > lastPage) {
     const params = new URLSearchParams(buildSubmissionsHref(status, lastPage).split("?")[1]);
@@ -46,7 +48,10 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
     }
     redirect(`/dashboard/submissions${params.size ? `?${params}` : ""}`);
   }
-  const items = rows.map((submission) => {
+  // The read above may run alongside authorization; metadata writes must wait
+  // until loadAdminPageData has confirmed the administrator's role.
+  const hydratedRows = await ensureSubmissionListMetadata(supabase, rows);
+  const items = hydratedRows.map((submission) => {
     const provider = getSubmissionStorageProvider(submission);
     return buildSubmissionListItem(submission, provider, provider === "cos" ? getCosPreviewUrl(submission.cover_ref) : null);
   });

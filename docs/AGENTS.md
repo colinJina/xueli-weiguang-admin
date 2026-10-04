@@ -32,7 +32,7 @@ C:\Users\31744\Desktop\xueli-weiguang
 - 使用与公开站点相同的 Supabase 项目。
 - 不要在公开读取路径中调用 Bilibili 或 YouTube 元数据服务。
 - 不要在公开用户投稿路径中调用 Bilibili metadata API、YouTube.js 或任何媒体下载逻辑。
-- 只有管理员审核详情流程可以触发 Bilibili / YouTube 元数据获取。
+- 只有管理员投稿审核列表与详情流程可以触发 Bilibili / YouTube 元数据获取；必须在管理员鉴权完成后执行，审核相关链接禁用预取。
 - 不要下载、代理或缓存 YouTube 音视频；公开视频播放只使用官方 iframe embed。
 - 不要添加 Python。
 - 不要添加 `child_process`。
@@ -143,7 +143,8 @@ COS_UPLOAD_MAX_BYTES
 管理后台处理审核：
 
 - 列表优先显示 `pending` 投稿，并按 `created_at desc` 排序。
-- 打开投稿详情时可以触发元数据获取。
+- 打开投稿审核列表时，自动获取当前页未缓存的待审核外链投稿信息，最多并发 4 条；已有缓存、已失败或已审核投稿不自动重复获取。
+- 打开投稿详情时仍可获取缺失元数据，并手动重试失败的获取。
 - 如果外链投稿 `fetched_at is null` 且 `fetch_error is null`，按平台获取 Bilibili / YouTube 元数据。
 - 获取成功后更新：
   - `auto_fetched_meta`

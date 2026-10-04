@@ -33,7 +33,7 @@ export function buildSubmissionListItem(
   } else if (!isOriginal && submission.fetch_error) {
     reviewHint = { label: "信息获取失败", description: "进入详情重试获取内容", needsAttention: true };
   } else if (!isOriginal && !submission.fetched_at) {
-    reviewHint = { label: "信息待获取", description: "进入审核后自动获取内容", needsAttention: true };
+    reviewHint = { label: "信息待获取", description: "打开审核列表时自动获取内容", needsAttention: true };
   } else if (!title) {
     reviewHint = { label: "标题缺失", description: "进入详情核实投稿信息", needsAttention: true };
   } else if (!coverUrl) {
