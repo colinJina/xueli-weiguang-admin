@@ -19,6 +19,7 @@ tsconfig.tsbuildinfo
 .playwright-mcp/
 .tmp/
 .vercel/
+supabase/.temp/
 
 # Logs
 npm-debug.log*

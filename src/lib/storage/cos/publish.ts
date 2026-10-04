@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { SubmissionRow } from "../../review/types";
+import type { ReviewPaletteColor } from "../../review/palette";
 import {
   copyCosObject,
   deleteCosObject,
@@ -25,7 +26,7 @@ const coverExtensions: Record<string, string> = {
 
 export type PublishSupabaseClient = {
   rpc: (
-    fn: "approve_cos_submission",
+    fn: "approve_cos_submission_with_palette",
     args: {
       p_submission_id: string;
       p_video_id: string;
@@ -33,7 +34,7 @@ export type PublishSupabaseClient = {
       p_playback_ref: string;
       p_cover_url: string;
       p_tag_ids: string[];
-      p_tone_ids: string[];
+      p_palette: ReviewPaletteColor[];
       p_review_note: string | null;
     },
   ) => PromiseLike<{
@@ -47,7 +48,7 @@ export type PublishCosSubmissionInput = {
   submission: SubmissionRow;
   categoryId: string;
   tagIds: string[];
-  toneIds: string[];
+  palette: ReviewPaletteColor[];
   reviewNote: string | null;
 };
 
@@ -224,14 +225,14 @@ export async function publishCosSubmission(
     });
     copiedKeys.push(coverPlaybackRef);
 
-    const { data, error } = await input.supabase.rpc("approve_cos_submission", {
+    const { data, error } = await input.supabase.rpc("approve_cos_submission_with_palette", {
       p_submission_id: submission.id,
       p_video_id: videoId,
       p_category_id: input.categoryId,
       p_playback_ref: playbackRef,
       p_cover_url: buildPublicCosUrl(config, coverPlaybackRef),
       p_tag_ids: input.tagIds,
-      p_tone_ids: input.toneIds,
+      p_palette: input.palette,
       p_review_note: input.reviewNote,
     });
 

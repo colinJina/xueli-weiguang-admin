@@ -6,12 +6,11 @@ import { listAllDictionaries } from "@/lib/review/queries";
 
 export async function GET() {
   try {
-    const { categories, tags, tones } = await loadAdminPageData(listAllDictionaries);
+    const { categories, tags } = await loadAdminPageData(listAllDictionaries);
     return NextResponse.json(
       {
         categories: categories.map(({ id, name }) => ({ id, name })),
         tags: tags.map(({ id, name }) => ({ id, name })),
-        tones: tones.map(({ id, name, color_hex, family_name }) => ({ id, name, color_hex, family_name })),
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );
