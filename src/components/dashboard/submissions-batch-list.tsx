@@ -4,52 +4,39 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { batchApproveSubmissions, batchRejectSubmissions } from "@/app/dashboard/actions";
+import { CoverPreview } from "@/components/dashboard/cover-preview";
 import { PendingButton } from "@/components/dashboard/pending-button";
+import { ReviewPaletteEditor } from "@/components/dashboard/review-palette-editor";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import type { SubmissionStatus } from "@/lib/review/types";
-
-export type SubmissionBatchListItem = {
-  id: string;
-  status: SubmissionStatus;
-  createdAt: string;
-  sourceLabel: string;
-  sourceDetail: string | null;
-  metadataLabel: string;
-};
+import type { ReviewPaletteColor } from "@/lib/review/palette";
+import type { SubmissionBatchListItem } from "@/lib/review/submission-list";
+import type { SubmissionStatusFilter } from "@/lib/review/types";
 
 type DictionaryOption = {
   id: string;
   name: string;
 };
 
-type ToneOption = DictionaryOption & {
-  color_hex?: string | null;
-  family_name?: string | null;
-};
-
 type SubmissionsBatchListProps = {
   items: SubmissionBatchListItem[];
   returnPath: string;
+  status: SubmissionStatusFilter;
 };
 
 type ReviewOptions = {
   categories: DictionaryOption[];
   tags: DictionaryOption[];
-  tones: ToneOption[];
 };
 
 const MAX_TAGS = 4;
-const MAX_TONES = 3;
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchListProps) {
+export function SubmissionsBatchList({ items, returnPath, status }: SubmissionsBatchListProps) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<ReadonlySet<string>>(new Set());
-  const [selectedToneIds, setSelectedToneIds] = useState<ReadonlySet<string>>(new Set());
+  const [palette, setPalette] = useState<ReviewPaletteColor[]>([]);
   const [options, setOptions] = useState<ReviewOptions | null>(null);
   const [optionsError, setOptionsError] = useState("");
   const [optionsAttempt, setOptionsAttempt] = useState(0);
-  const { categories = [], tags = [], tones = [] } = options ?? {};
+  const { categories = [], tags = [] } = options ?? {};
 
   const pendingIds = items
     .filter((item) => item.status === "pending")
@@ -129,34 +116,37 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
     <form action={batchApproveSubmissions}>
       <input name="returnPath" type="hidden" value={returnPath} />
       <section className="overflow-hidden admin-card">
-        <div className="hidden grid-cols-[36px_1.2fr_1fr_130px_120px] border-b border-border bg-panel px-4 py-3 text-xs uppercase tracking-[0.16em] text-subtle md:grid">
-          <span className="flex items-center">
-            <input
-              aria-label="全选本页待审核"
-              checked={allPendingSelected}
-              className="h-4 w-4 accent-white"
-              disabled={pendingIds.length === 0}
-              onChange={toggleAllPending}
-              type="checkbox"
-            />
-          </span>
-          <span>来源</span>
-          <span>提交时间</span>
-          <span>元数据</span>
-          <span>状态</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-panel px-4 py-3 text-xs text-subtle sm:px-5">
+          <div className="flex items-center gap-4">
+            {pendingIds.length > 0 ? (
+              <label className="flex cursor-pointer items-center gap-3 text-muted">
+                <input
+                  aria-label="全选本页待审核"
+                  checked={allPendingSelected}
+                  className="h-4 w-4 accent-foreground"
+                  onChange={toggleAllPending}
+                  ref={(element) => { if (element) { element.indeterminate = selectedCount > 0 && !allPendingSelected; } }}
+                  type="checkbox"
+                />
+                全选本页待审核
+              </label>
+            ) : <span className="font-medium text-muted">投稿内容</span>}
+            <span>本页 {items.length} 条</span>
+          </div>
+          {pendingIds.length > 0 ? <span>勾选后可批量审核</span> : null}
         </div>
         {items.length ? (
-          items.map((item) => (
+          items.map((item, index) => (
             <div
-              className="grid grid-cols-[36px_1fr] items-start gap-2 border-b border-border px-4 py-3 text-sm transition last:border-b-0 hover:bg-panel md:grid-cols-[36px_1.2fr_1fr_130px_120px] md:items-center"
+              className={`grid grid-cols-[20px_minmax(0,1fr)] items-start gap-x-3 gap-y-4 border-b border-border px-4 py-5 text-sm transition-colors last:border-b-0 sm:px-5 lg:grid-cols-[20px_minmax(0,1fr)_136px_104px] lg:items-center lg:gap-x-5 ${selectedIds.has(item.id) ? "bg-panelHover shadow-[inset_3px_0_0_var(--text-2)]" : "hover:bg-panel"}`}
               key={item.id}
             >
-              <span className="flex items-center pt-1 md:pt-0">
+              <span className="flex min-h-5 items-center pt-1 lg:pt-0">
                 {item.status === "pending" ? (
                   <input
-                    aria-label="选择该投稿"
+                    aria-label={`选择投稿：${item.title}`}
                     checked={selectedIds.has(item.id)}
-                    className="h-4 w-4 accent-white"
+                    className="h-4 w-4 accent-foreground"
                     name="submissionIds"
                     onChange={() => toggleId(item.id)}
                     type="checkbox"
@@ -165,41 +155,64 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
                 ) : null}
               </span>
               <Link
-                className="col-start-2 grid gap-2 md:col-span-4 md:grid-cols-[1.2fr_1fr_130px_120px] md:items-center"
+                aria-label={`查看投稿：${item.title}`}
+                className="group col-start-2 flex min-w-0 items-start gap-3 rounded-control sm:gap-4"
                 href={`/dashboard/submissions/${item.id}`}
                 prefetch={false}
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-foreground">{item.sourceLabel}</span>
-                  {item.sourceDetail ? (
-                    <span className="mt-1 block truncate text-xs text-subtle">
-                      {item.sourceDetail}
-                    </span>
-                  ) : null}
+                <span className="relative block w-28 shrink-0 sm:w-44">
+                  <CoverPreview emptyLabel={item.reviewHint.label === "信息待获取" ? "待获取封面" : "暂无封面"} priority={index === 0} sizes="(max-width: 639px) 112px, 176px" src={item.coverUrl} title={item.title} />
+                  {item.duration && item.coverUrl ? <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] tabular-nums text-white">{item.duration}</span> : null}
                 </span>
-                <span className="text-muted">{item.createdAt}</span>
-                <span className="text-muted">{item.metadataLabel}</span>
-                <StatusBadge status={item.status} />
+                <span className="block min-w-0 py-0.5">
+                  <span className="line-clamp-2 break-words text-sm font-medium leading-6 text-foreground group-hover:underline group-hover:underline-offset-4 sm:text-base" title={item.title}>{item.title}</span>
+                  <span className="mt-2 block truncate text-xs text-muted">{item.author ? `作者：${item.author}` : item.platformLabel === "原创上传" ? "原创视频" : "作者信息待获取"}</span>
+                  <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
+                    <span className="rounded border border-borderStrong px-1.5 py-0.5 text-[11px]">{item.platformLabel}</span>
+                    <span>{item.createdAt} 提交</span>
+                  </span>
+                </span>
               </Link>
+              <div className="col-start-2 flex items-center justify-between gap-3 lg:contents">
+                <div className="min-w-0 space-y-2">
+                  <StatusBadge status={item.status} />
+                  {item.status === "pending" ? (
+                    <div>
+                      <p className={`text-xs ${item.reviewHint.needsAttention ? "text-amber-300" : "text-muted"}`}>{item.reviewHint.label}</p>
+                      <p className="mt-1 hidden text-xs leading-5 text-subtle sm:block">{item.reviewHint.description}</p>
+                    </div>
+                  ) : null}
+                </div>
+                <Link
+                  aria-label={`${item.status === "pending" ? "审核" : "查看"}投稿：${item.title}`}
+                  className={item.status === "pending" ? "admin-button gap-2 px-3" : "admin-secondary-button gap-2 px-3"}
+                  href={`/dashboard/submissions/${item.id}`}
+                  prefetch={false}
+                >
+                  {item.status === "pending" ? "开始审核" : "查看详情"}
+                  <span aria-hidden="true">→</span>
+                </Link>
+              </div>
             </div>
           ))
         ) : (
-          <div className="px-4 py-12 text-center">
-            <p className="text-base font-medium text-foreground">暂无投稿。</p>
-            <p className="mt-2 text-sm text-muted">用户提交的外链和原创投稿会显示在这里。</p>
+          <div className="px-4 py-16 text-center">
+            <p className="text-base font-medium text-foreground">{status === "pending" ? "待审核队列已清空" : status === "approved" ? "暂无已通过投稿" : status === "rejected" ? "暂无已拒绝投稿" : "暂无投稿"}</p>
+            <p className="mt-2 text-sm text-subtle">{status === "pending" ? "新的投稿会出现在这里，也可以切换状态查看已处理内容。" : "用户投稿及审核记录会显示在对应的列表中。"}</p>
           </div>
         )}
       </section>
 
       {selectedCount > 0 ? (
         <>
-          <div aria-hidden="true" className="h-48 md:h-40" />
+          <div aria-hidden="true" className="h-80 md:h-72" />
           <div className="admin-fade-in-up fixed inset-x-0 bottom-0 z-40 border-t border-borderStrong bg-background/95 backdrop-blur">
-            <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4">
+            <div className="mx-auto flex max-h-[50dvh] max-w-6xl flex-col gap-3 overflow-y-auto px-4 py-4 md:max-h-[70dvh]">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-subtle">
-                  已选 {selectedCount} 条待审核投稿
-                </p>
+                <div>
+                  <p aria-live="polite" className="text-sm font-medium text-foreground">已选 {selectedCount} 条待审核投稿</p>
+                  <p className="mt-1 text-xs text-subtle">请逐条核对内容；所选投稿将使用相同分类、标签和视频色板。</p>
+                </div>
                 <button
                   className="text-xs text-subtle underline-offset-4 transition hover:text-foreground hover:underline"
                   onClick={() => setSelectedIds(new Set())}
@@ -211,7 +224,7 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
 
               {!options ? (
                 <div aria-live="polite" className="flex items-center gap-3 text-sm text-muted">
-                  <span>{optionsError || "正在加载分类、标签和色调…"}</span>
+                  <span>{optionsError || "正在加载分类和标签…"}</span>
                   {optionsError ? (
                     <button className="admin-secondary-button" onClick={() => setOptionsAttempt((attempt) => attempt + 1)} type="button">
                       重试
@@ -237,14 +250,14 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
 
                 <label className="block space-y-2">
                   <span className="text-xs uppercase tracking-[0.16em] text-subtle">
-                    审核备注（可选，通过与拒绝共用）
+                    审核备注（通过与拒绝共用）
                   </span>
-                  <input className="admin-input" name="reviewNote" type="text" />
+                  <input className="admin-input" name="reviewNote" placeholder="填写审核意见或拒绝原因" type="text" />
                 </label>
 
                 <div className="flex gap-2">
                   <PendingButton className="admin-button" disabled={!options || categories.length === 0} pendingText="批量通过中…">
-                    批量通过
+                    通过 {selectedCount} 条
                   </PendingButton>
                   <PendingButton
                     className="admin-secondary-button h-10"
@@ -252,14 +265,15 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
                     formNoValidate
                     pendingText="批量拒绝中…"
                   >
-                    批量拒绝
+                    拒绝 {selectedCount} 条
                   </PendingButton>
                 </div>
               </div>
 
+              <ReviewPaletteEditor onChange={setPalette} palette={palette} />
               <details className="admin-card">
                 <summary className="cursor-pointer px-3 py-2 text-xs uppercase tracking-[0.16em] text-subtle transition hover:text-foreground">
-                  标签 / 色调（可选，应用到全部选中项）
+                  标签（可选，应用到全部选中项）
                 </summary>
                 <div className="grid gap-4 border-t border-border p-3 lg:grid-cols-2">
                   <fieldset className="space-y-2">
@@ -300,55 +314,7 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
                     </div>
                   </fieldset>
 
-                  <fieldset className="space-y-2">
-                    <legend className="text-xs uppercase tracking-[0.16em] text-subtle">
-                      色调，最多 {MAX_TONES} 个
-                    </legend>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {tones.length ? (
-                        tones.map((tone) => {
-                          const checked = selectedToneIds.has(tone.id);
-                          const disabled = !checked && selectedToneIds.size >= MAX_TONES;
 
-                          return (
-                            <label
-                              className={`flex cursor-pointer flex-col items-center gap-2 border border-border bg-panel px-2 py-3 transition hover:border-muted ${
-                                disabled ? "cursor-not-allowed opacity-40" : ""
-                              }`}
-                              key={tone.id}
-                            >
-                              <input
-                                checked={checked}
-                                className="peer sr-only"
-                                disabled={disabled}
-                                name="toneIds"
-                                onChange={() =>
-                                  toggleLimitedId(setSelectedToneIds, tone.id, MAX_TONES)
-                                }
-                                type="checkbox"
-                                value={tone.id}
-                              />
-                              <span
-                                aria-hidden="true"
-                                className="h-9 w-9 rounded-full border border-borderStrong shadow-[0_0_0_4px_rgba(255,255,255,0.04)] transition peer-checked:scale-95 peer-checked:border-foreground peer-checked:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
-                                style={{ backgroundColor: getToneColor(tone) }}
-                              />
-                              <span className="max-w-full truncate text-center text-xs text-muted peer-checked:text-foreground">
-                                {tone.name}
-                              </span>
-                              {tone.family_name ? (
-                                <span className="max-w-full truncate text-center text-[0.68rem] text-subtle">
-                                  {tone.family_name}
-                                </span>
-                              ) : null}
-                            </label>
-                          );
-                        })
-                      ) : (
-                        <p className="text-sm text-muted">暂无条目。</p>
-                      )}
-                    </div>
-                  </fieldset>
                 </div>
               </details>
             </div>
@@ -357,9 +323,4 @@ export function SubmissionsBatchList({ items, returnPath }: SubmissionsBatchList
       ) : null}
     </form>
   );
-}
-
-function getToneColor(tone: { color_hex?: string | null; name: string }) {
-  const color = tone.color_hex ?? tone.name;
-  return HEX_COLOR_PATTERN.test(color) ? color : "#D4D4D4";
 }

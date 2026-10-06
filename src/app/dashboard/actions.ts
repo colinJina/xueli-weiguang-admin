@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { requireAdminForAction as requireAdmin } from "@/lib/admin/auth";
+import { insertDictionaryRecord } from "@/lib/review/dictionary-write";
+import { coerceReviewPalette } from "@/lib/review/palette";
 import {
   deletePublishedVideoRecord,
   type DeletePublishedVideoSupabaseClient,
@@ -22,20 +24,17 @@ import {
   normalizeDictionaryName,
   normalizeSortOrder,
   normalizeToneColor,
-  normalizeToneFamilyId,
-  normalizeToneFamilyKey,
 } from "@/lib/review/review-utils";
 import type { SubmissionRow } from "@/lib/review/types";
 import { getSubmissionReturnPath } from "@/lib/review/submission-navigation";
 import { getMenuReturnPath } from "@/lib/review/menu-navigation";
 import { publishCosSubmission } from "@/lib/storage/cos/publish";
 
-type DictionaryKind = "categories" | "tags" | "tone_families" | "tones";
+type DictionaryKind = "categories" | "tags" | "tones";
 
 const dictionaryPaths: Record<DictionaryKind, string> = {
   categories: "/dashboard/categories",
   tags: "/dashboard/tags",
-  tone_families: "/dashboard/tone-families",
   tones: "/dashboard/tones",
 };
 
@@ -131,16 +130,16 @@ export async function approveSubmission(formData: FormData) {
     }
 
     const tagIds = coerceSelectedIds(formData, "tagIds", 4);
-    const toneIds = coerceSelectedIds(formData, "toneIds", 3);
+    const palette = coerceReviewPalette(formData.get("palette"));
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
     const storageProvider = getSubmissionStorageProvider(submission);
 
     if (storageProvider === "bilibili" || storageProvider === "youtube") {
-      const { error } = await supabase.rpc("approve_submission", {
+      const { error } = await supabase.rpc("approve_submission_with_palette", {
         p_submission_id: submission.id,
         p_category_id: categoryId,
         p_tag_ids: tagIds,
-        p_tone_ids: toneIds,
+        p_palette: palette,
         p_review_note: reviewNote,
       });
 
@@ -153,7 +152,7 @@ export async function approveSubmission(formData: FormData) {
         submission,
         categoryId,
         tagIds,
-        toneIds,
+        palette,
         reviewNote,
       });
     } else {
@@ -293,7 +292,7 @@ export async function batchApproveSubmissions(formData: FormData) {
     }
 
     const tagIds = coerceSelectedIds(formData, "tagIds", 4);
-    const toneIds = coerceSelectedIds(formData, "toneIds", 3);
+    const palette = coerceReviewPalette(formData.get("palette"));
     const reviewNote = coerceOptionalReviewNote(formData.get("reviewNote"));
 
     const { data: submissions, error: submissionsError } = await supabase
@@ -324,11 +323,11 @@ export async function batchApproveSubmissions(formData: FormData) {
             await fetchAndPersistMetadata(supabase, submission);
           }
 
-          const { error } = await supabase.rpc("approve_submission", {
+          const { error } = await supabase.rpc("approve_submission_with_palette", {
             p_submission_id: submission.id,
             p_category_id: categoryId,
             p_tag_ids: tagIds,
-            p_tone_ids: toneIds,
+            p_palette: palette,
             p_review_note: reviewNote,
           });
 
@@ -341,7 +340,7 @@ export async function batchApproveSubmissions(formData: FormData) {
             submission,
             categoryId,
             tagIds,
-            toneIds,
+            palette,
             reviewNote,
           });
         } else {
@@ -532,27 +531,14 @@ export async function addDictionaryItem(kind: DictionaryKind, formData: FormData
     let error: { message: string; code?: string } | null;
 
     if (kind === "tones") {
-      const name = normalizeDictionaryName(formData.get("name"));
       const manualColorHex = getStringField(formData, "manualColorHex");
       const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-      const familyId = normalizeToneFamilyId(formData.get("familyId"));
-      ({ error } = await supabase
-        .from("tones")
-        .insert({ color_hex: colorHex, family_id: familyId, name }));
-    } else if (kind === "tone_families") {
-      const manualColorHex = getStringField(formData, "manualColorHex");
-      const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-      ({ error } = await supabase.from("tone_families").insert({
-        color_hex: colorHex,
-        is_active: true,
-        key: normalizeToneFamilyKey(formData.get("key")),
-        name: normalizeDictionaryName(formData.get("name"), 20),
-        sort_order: normalizeSortOrder(formData.get("sortOrder")),
-      }));
+      const name = normalizeDictionaryName(getStringField(formData, "name") || colorHex);
+      ({ error } = await insertDictionaryRecord(supabase, "tones",
+        { color_hex: colorHex, name }));
     } else {
-      ({ error } = await supabase
-        .from(kind)
-        .insert({ name: normalizeDictionaryName(formData.get("name")), ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}) }));
+      ({ error } = await insertDictionaryRecord(supabase, kind,
+        { name: normalizeDictionaryName(formData.get("name")), ...(kind === "categories" ? { sort_order: normalizeSortOrder(formData.get("sortOrder")) } : {}) }));
     }
 
     throwDictionaryError(error);
@@ -568,9 +554,9 @@ function throwDictionaryError(error: { message: string; code?: string } | null) 
     return;
   }
   const message = error.code === "23505"
-    ? "名称或 Key 已存在，请使用其他值。"
+    ? "名称或色值已存在，请使用已有条目。"
     : error.code === "23503"
-      ? "条目正在被使用，或选择的色族已不存在，请刷新后重试。"
+      ? "条目正在被使用，请刷新后重试。"
       : error.message;
   throw new Error(message);
 }
@@ -623,8 +609,7 @@ export async function updateToneItem(formData: FormData) {
       .from("tones")
       .update({
         color_hex: colorHex,
-        family_id: normalizeToneFamilyId(formData.get("familyId")),
-        name: normalizeDictionaryName(formData.get("name")),
+        name: normalizeDictionaryName(getStringField(formData, "name") || colorHex),
       })
       .eq("id", id).select("id").maybeSingle();
 
@@ -634,41 +619,6 @@ export async function updateToneItem(formData: FormData) {
     }
     revalidateDictionaryPages();
     redirectWithMessage(path, "notice", "色调已更新。");
-  } catch (error) {
-    redirectActionError(error, path);
-  }
-}
-
-export async function updateToneFamilyItem(formData: FormData) {
-  const path = getMenuReturnPath(dictionaryPaths.tone_families, formData.get("returnPath"));
-
-  try {
-    const { supabase } = await requireAdmin();
-    const id = getStringField(formData, "id");
-
-    if (!id) {
-      throw new Error("缺少条目 ID。");
-    }
-
-    const manualColorHex = getStringField(formData, "manualColorHex");
-    const colorHex = normalizeToneColor(manualColorHex || formData.get("colorHex"));
-    const { data, error } = await supabase
-      .from("tone_families")
-      .update({
-        color_hex: colorHex,
-        is_active: formData.get("isActive") === "on",
-        key: normalizeToneFamilyKey(formData.get("key")),
-        name: normalizeDictionaryName(formData.get("name"), 20),
-        sort_order: normalizeSortOrder(formData.get("sortOrder")),
-      })
-      .eq("id", id).select("id").maybeSingle();
-
-    throwDictionaryError(error);
-    if (!data) {
-      throw new Error("色族已不存在，请刷新列表。");
-    }
-    revalidateDictionaryPages();
-    redirectWithMessage(path, "notice", "色族已更新。");
   } catch (error) {
     redirectActionError(error, path);
   }
@@ -689,7 +639,6 @@ export async function deleteDictionaryItem(kind: DictionaryKind, formData: FormD
       categories: { table: "videos", column: "category_id", message: "该分类已被视频使用，调整视频分类后再删除。" },
       tags: { table: "video_tags", column: "tag_id", message: "该标签已被视频使用，解除绑定后再删除。" },
       tones: { table: "video_tones", column: "tone_id", message: "该色调已被视频使用，解除绑定后再删除。" },
-      tone_families: { table: "tones", column: "family_id", message: "该色族仍有色调归属，请先调整色调归属。" },
     }[kind];
     const usage = await supabase.from(references.table).select(references.column, { count: "exact", head: true }).eq(references.column, id);
     if (usage.error) {

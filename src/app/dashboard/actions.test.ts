@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   revalidate: vi.fn(),
   redirect: vi.fn((path: string): never => { throw new Error(`redirect:${path}`); }),
   fetchMetadata: vi.fn(),
+  getSubmission: vi.fn(),
+  getSubmissionOrNotFound: vi.fn(),
 }));
 
 vi.mock("@/lib/admin/auth", () => ({ requireAdminForAction: mocks.requireAdmin }));
@@ -21,14 +23,14 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/review/queries", () => ({
   fetchExternalSubmissionMetadata: mocks.fetchMetadata,
-  getSubmissionById: vi.fn(),
-  getSubmissionOrNotFound: vi.fn(),
+  getSubmissionById: mocks.getSubmission,
+  getSubmissionOrNotFound: mocks.getSubmissionOrNotFound,
   getSubmissionStorageProvider: (submission: { platform: string }) => submission.platform,
   isExternalSubmission: () => true,
 }));
 vi.mock("@/lib/storage/cos/publish", () => ({ publishCosSubmission: vi.fn() }));
 
-import { batchApproveSubmissions, batchRejectSubmissions, rejectSubmission, updateDictionaryItem, updateToneItem, updateToneFamilyItem, deleteDictionaryItem, applyHomeHeroFeatureRequest, rejectHomeHeroFeatureRequest, addDictionaryItem } from "./actions";
+import { approveSubmission, batchApproveSubmissions, batchRejectSubmissions, rejectSubmission, updateDictionaryItem, updateToneItem, deleteDictionaryItem, applyHomeHeroFeatureRequest, rejectHomeHeroFeatureRequest, addDictionaryItem } from "./actions";
 
 function queryResult(data: unknown, error: { message: string; code?: string } | null = null, count = 0) {
   const result = { data, error, count };
@@ -57,6 +59,145 @@ function destination() {
   return new URL(mocks.redirect.mock.lastCall![0], "https://admin.test");
 }
 
+describe("single submission publication regression", () => {
+  const sourceMetadata = Object.freeze({
+    title: "原平台标题", pic: "https://example.test/original-cover.jpg", desc: "原平台简介",
+    ownerName: "原平台上传者", ownerAvatar: "https://example.test/avatar.jpg",
+    viewCount: 1234, likeCount: 56, duration: 120, pubdate: 1750000000,
+  });
+  const submission = (overrides: Record<string, unknown> = {}) => ({
+    id: "submission", platform: "bilibili", storage_provider: "bilibili", status: "pending",
+    auto_fetched_meta: sourceMetadata, fetched_at: "2026-10-03T00:00:00Z", fetch_error: null,
+    ...overrides,
+  });
+  function reviewForm() {
+    const form = new FormData();
+    form.set("submissionId", "submission");
+    form.set("categoryId", "category");
+    for (const id of ["tag-1", "tag-2", "tag-3", "tag-4"]) {
+      form.append("tagIds", id);
+    }
+    form.set("palette", JSON.stringify([
+      { hex: "abcdef", percentage: 0.5 },
+      { hex: "#123456", percentage: null },
+      { hex: "#FFFFFF", percentage: null },
+    ]));
+    form.set("reviewNote", "  已核实 PVDex 建议  ");
+    // Suggestions are client-side candidates. Extra request fields must never
+    // replace source metadata or become extra publish RPC arguments.
+    form.set("pvdexSuggestion", JSON.stringify({
+      title: "PVDex 标题", tags: ["建议标签"], colors: [{ hex: "#ABCDEF", percentage: 0.5 }],
+    }));
+    return form;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireAdmin.mockResolvedValue({ supabase: { from: mocks.from, rpc: mocks.rpc }, user: { id: "admin" } });
+    mocks.getSubmission.mockResolvedValue(submission());
+    mocks.rpc.mockResolvedValue({ data: "published-video", error: null });
+  });
+
+  it.each(["bilibili", "youtube"])("preserves source metadata and original publish arguments for %s", async (platform) => {
+    const row = submission({ platform, storage_provider: platform });
+    mocks.getSubmission.mockResolvedValue(row);
+    const originalMetadata = JSON.stringify(row.auto_fetched_meta);
+    await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
+    expect(mocks.getSubmission).toHaveBeenCalledWith({ from: mocks.from, rpc: mocks.rpc }, "submission");
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission_with_palette", {
+      p_submission_id: "submission", p_category_id: "category",
+      p_tag_ids: ["tag-1", "tag-2", "tag-3", "tag-4"],
+      p_palette: [
+        { hex: "#ABCDEF", percentage: 0.5 },
+        { hex: "#123456", percentage: null },
+        { hex: "#FFFFFF", percentage: null },
+      ],
+      p_review_note: "已核实 PVDex 建议",
+    });
+    expect(row.auto_fetched_meta).toBe(sourceMetadata);
+    expect(JSON.stringify(row.auto_fetched_meta)).toBe(originalMetadata);
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.fetchMetadata).not.toHaveBeenCalled();
+    expect(destination().pathname).toBe("/dashboard/submissions");
+    expect(destination().searchParams.get("notice")).toBe("投稿已通过。");
+    expect(destination().searchParams.has("error")).toBe(false);
+  });
+
+  it.each([
+    { kind: "category", error: "必须选择分类。" },
+    { kind: "tags", error: "最多选择 4 个条目。" },
+    { kind: "colors", error: "色板必须是最多 5 个颜色的列表。" },
+  ])("blocks publication before RPC when $kind violates review limits", async ({ kind, error }) => {
+    const form = reviewForm();
+    if (kind === "category") {
+      form.delete("categoryId");
+    } else if (kind === "tags") {
+      form.append("tagIds", "tag-5");
+    } else {
+      form.set("palette", JSON.stringify(["112233", "223344", "334455", "445566", "556677", "667788"].map((hex) => ({ hex }))));
+    }
+    await expect(approveSubmission(form)).rejects.toThrow("redirect:");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(destination().pathname).toBe("/dashboard/submissions/submission");
+    expect(destination().searchParams.get("error")).toBe(error);
+    expect(destination().searchParams.has("notice")).toBe(false);
+  });
+
+  it.each([
+    { fetched_at: null, fetch_error: "原平台请求超时", metadata: {}, message: "Fetch metadata before approving." },
+    { fetched_at: "2026-10-03T00:00:00Z", fetch_error: "原平台请求超时", metadata: sourceMetadata, message: "Resolve metadata fetch error before approving." },
+    { fetched_at: "2026-10-03T00:00:00Z", fetch_error: null, metadata: { title: "只有 PVDex 标题" }, message: "Cached metadata is incomplete." },
+  ])("preserves the metadata RPC rejection despite available PVDex candidates: $message", async ({ fetched_at, fetch_error, metadata, message }) => {
+    const row = submission({ fetched_at, fetch_error, auto_fetched_meta: metadata });
+    mocks.getSubmission.mockResolvedValue(row);
+    // These are the existing approve_submission procedure's error messages.
+    // PVDex must neither bypass that procedure nor swallow its rejection.
+    mocks.rpc.mockResolvedValue({ data: null, error: { message, code: "22023" } });
+    await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("approve_submission_with_palette", {
+      p_submission_id: "submission", p_category_id: "category",
+      p_tag_ids: ["tag-1", "tag-2", "tag-3", "tag-4"],
+      p_palette: [
+        { hex: "#ABCDEF", percentage: 0.5 },
+        { hex: "#123456", percentage: null },
+        { hex: "#FFFFFF", percentage: null },
+      ], p_review_note: "已核实 PVDex 建议",
+    });
+    expect(row.auto_fetched_meta).toBe(metadata);
+    expect(row.fetched_at).toBe(fetched_at);
+    expect(row.fetch_error).toBe(fetch_error);
+    expect(mocks.fetchMetadata).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    expect(destination().searchParams.get("error")).toBe(message);
+    expect(destination().searchParams.has("notice")).toBe(false);
+  });
+
+  it.each(["approved", "rejected"])("never republishes a %s submission", async (status) => {
+    mocks.getSubmission.mockResolvedValue(submission({ status }));
+    await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.fetchMetadata).not.toHaveBeenCalled();
+    expect(destination().searchParams.get("error")).toBe("只能审核待处理投稿。");
+  });
+
+  it("reports a removed submission without publishing", async () => {
+    mocks.getSubmission.mockResolvedValue(null);
+    await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(destination().searchParams.get("error")).toBe("投稿不存在。");
+  });
+
+  it("requires action authorization before reading or publishing a submission", async () => {
+    mocks.requireAdmin.mockRejectedValue(new Error("redirect:/login?error=not_admin"));
+    await expect(approveSubmission(reviewForm())).rejects.toThrow("redirect:/login?error=not_admin");
+    expect(mocks.getSubmission).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+});
+
 describe("review actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,9 +218,17 @@ describe("review actions", () => {
   it("reads a batch in one request and retains filter/page after successful publication", async () => {
     const query = queryResult(["a", "b"].map((id) => ({ id, platform: "bilibili", status: "pending", fetched_at: "cached" })));
     mocks.from.mockReturnValue(query);
-    await expect(batchApproveSubmissions(batchForm())).rejects.toThrow("redirect:");
+    const form = batchForm();
+    const palette = ["#112233", "#223344", "#334455", "#445566", "#556677"].map((hex) => ({ hex, percentage: null }));
+    form.set("palette", JSON.stringify(palette));
+    await expect(batchApproveSubmissions(form)).rejects.toThrow("redirect:");
     expect(mocks.from).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    for (const id of ["a", "b"]) {
+      expect(mocks.rpc).toHaveBeenCalledWith("approve_submission_with_palette", {
+        p_submission_id: id, p_category_id: "category", p_tag_ids: [], p_palette: palette, p_review_note: null,
+      });
+    }
     expect(mocks.fetchMetadata).not.toHaveBeenCalled();
     expect(destination().searchParams.get("status")).toBe("all");
     expect(destination().searchParams.get("page")).toBe("2");
@@ -133,7 +282,7 @@ describe("other menu mutations", () => {
   });
   function dictionaryForm() {
     const form = new FormData();
-    for (const [key, value] of Object.entries({ id: "item", name: "雪", key: "snow", familyId: "family", manualColorHex: "#FFFFFF", sortOrder: "2", returnPath: "/dashboard/categories?q=雪" })) {
+    for (const [key, value] of Object.entries({ id: "item", name: "雪", manualColorHex: "#FFFFFF", sortOrder: "2", returnPath: "/dashboard/categories?q=雪" })) {
       form.set(key, value);
     }
     return form;
@@ -148,9 +297,9 @@ describe("other menu mutations", () => {
     expect(mocks.revalidate).toHaveBeenCalledWith("/dashboard/tones");
     expect(mocks.revalidate).toHaveBeenCalledWith("/dashboard/submissions/[id]", "page");
   });
-  it("does not report success for missing dictionary, tone or family rows", async () => {
+  it("does not report success for missing dictionary or tone rows", async () => {
     mocks.from.mockReturnValue(queryResult(null));
-    for (const action of [updateDictionaryItem.bind(null, "tags"), updateToneItem, updateToneFamilyItem]) {
+    for (const action of [updateDictionaryItem.bind(null, "tags"), updateToneItem]) {
       await expect(action(dictionaryForm())).rejects.toThrow("redirect:");
       expect(destination().searchParams.get("error")).toContain("已不存在");
       expect(destination().searchParams.has("notice")).toBe(false);
@@ -161,11 +310,22 @@ describe("other menu mutations", () => {
     await expect(addDictionaryItem("tags", dictionaryForm())).rejects.toThrow("redirect:");
     expect(destination().searchParams.get("error")).toContain("已存在");
   });
-  it("prevents deletion of a family that still has tones", async () => {
+  it("creates a color with a HEX name when the optional name is blank", async () => {
+    const query = queryResult(null);
+    mocks.from.mockReturnValue(query);
+    const form = dictionaryForm();
+    form.set("name", "  ");
+    form.set("manualColorHex", "abcdef");
+    await expect(addDictionaryItem("tones", form)).rejects.toThrow("redirect:");
+    expect(mocks.from).toHaveBeenCalledExactlyOnceWith("tones");
+    expect(query.insert).toHaveBeenCalledWith({ name: "#ABCDEF", color_hex: "#ABCDEF" });
+    expect(destination().searchParams.get("notice")).toBe("条目已添加。");
+  });
+  it("prevents deletion of a color used by videos", async () => {
     const usage = queryResult(null, null, 3);
     mocks.from.mockReturnValue(usage);
-    await expect(deleteDictionaryItem("tone_families", dictionaryForm())).rejects.toThrow("redirect:");
-    expect(destination().searchParams.get("error")).toContain("仍有色调归属");
+    await expect(deleteDictionaryItem("tones", dictionaryForm())).rejects.toThrow("redirect:");
+    expect(destination().searchParams.get("error")).toContain("视频");
     expect(mocks.from).toHaveBeenCalledOnce();
     expect(usage.delete).not.toHaveBeenCalled();
   });

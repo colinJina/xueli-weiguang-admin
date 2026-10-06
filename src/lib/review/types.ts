@@ -39,11 +39,17 @@ export type SubmissionListRow = Pick<
   | "external_id"
   | "source_ref"
   | "pending_title"
+  | "cover_ref"
   | "status"
   | "fetched_at"
   | "fetch_error"
   | "created_at"
->;
+> & {
+  fetched_title: string | null;
+  fetched_cover: string | null;
+  fetched_author: string | null;
+  fetched_duration: number | null;
+};
 
 export type SubmissionStatusFilter = SubmissionStatus | "all";
 
@@ -51,19 +57,7 @@ export type DictionaryItem = {
   id: string;
   name: string;
   color_hex?: string | null;
-  family_id?: string | null;
-  family_name?: string | null;
   sort_order?: number;
-  created_at: string;
-};
-
-export type ToneFamilyItem = {
-  id: string;
-  key: string;
-  name: string;
-  color_hex: string;
-  sort_order: number;
-  is_active: boolean;
   created_at: string;
 };
 

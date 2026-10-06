@@ -43,18 +43,19 @@ C:\Users\31744\Desktop\xueli-weiguang-admin
   -> 打开待审核投稿
   -> 如未获取则按平台获取 Bilibili / YouTube 元数据
   -> 将结果缓存到 public.submissions
-  -> 管理员选择分类、标签和色调
-  -> 通过 public.approve_submission(...) 审核，或拒绝投稿
+  -> 管理员选择分类、标签和最多 5 色的视频色板
+  -> 通过 public.approve_submission_with_palette(...) 审核，或拒绝投稿
 ```
 
-通过审核刻意以数据库事务作为边界。管理后台调用 `public.approve_submission(...)`，该函数会创建 `videos` 记录、写入 `video_tags` / `video_tones`，并在一次 Postgres 函数调用中把投稿标记为 `approved`。只有每条 `approved` 投稿都恰好对应一条 `videos.submission_id` 时，任务 4 才算完成校验。
+通过审核以数据库事务作为边界。管理后台调用 `public.approve_submission_with_palette(...)`；COS 使用 `public.approve_cos_submission_with_palette(...)`。函数按 HEX 复用或创建具体颜色、创建 `videos`、写入 `video_tags` / `video_tones`，并把投稿标记为 `approved`。每条 `approved` 投稿都恰好对应一条 `videos.submission_id`。
 
 ### 公开读取流程
 
 ```txt
 公开档案/详情页
   -> 从 Supabase 读取已发布视频
-  -> 读取 tone_families、tones 和 video_tones，用于色族筛选和具体颜色圆点展示
+  -> 调用 get_archive_videos_by_color，先筛选再计数分页
+  -> 只读取当前页 video_tones 与 tones，展示最多 5 色
 ```
 
 公开读取不得调用 Bilibili / YouTube 元数据端点。
@@ -167,26 +168,26 @@ created_at timestamptz
 
 ### dictionaries
 
-`categories`、`tags`、`tone_families` 和 `tones` 是由管理员维护的字典。
-`tone_families` 存储公开档案筛选器使用的标准色族；`tones.color_hex` 存储具体色调圆点，`tones.family_id` 决定该具体色调参与哪个色族筛选。
+`categories`、`tags` 和 `tones` 是字典。`tones.color_hex` 存储统一大写的唯一 HEX；审核不要求名称或色族，发布时自动创建缺失颜色并以 HEX 命名。后台仍提供具体颜色维护页。
+前台固定红、橙、黄、绿、青、蓝、紫、粉、棕、中性 10 个圆点是筛选预设；数据库按 HSL 规则实时分类，不维护归属字段。精细色盘按加权 RGB 色差匹配，最多 3 个目标色，支持任一或全部匹配。
 
 当前规则：
 
 - 分类：每个视频一个
 - 标签：每个视频最多 4 个
-- 色调：每个视频最多 3 个
-- 色族：每个具体色调必须归属一个色族，公开 Archive 按色族 key 筛选
-- 分类和标签当前支持新增和删除；色族与具体色调支持新增、更新和删除
+- 具体颜色：每个视频最多 5 个
+- 人工色族管理已移除；历史 `tones=red` 等 URL 沿用固定预设 key
+- 分类、标签和具体颜色支持维护；审核中的颜色不依赖完整词库
 - 被已发布视频引用时禁止删除
 
 ### 关系表
 
 ```txt
 video_tags(video_id, tag_id)
-video_tones(video_id, tone_id)
+video_tones(video_id, tone_id, percentage nullable, sort_order)
 ```
 
-两者都使用组合主键。
+两者都使用组合主键。HEX 属于颜色定义，占比和顺序属于视频与颜色的关联，依赖完整组合主键，保持三范式。历史关联稳定排序回填，占比保持 NULL。迁移、回滚与删除前快照见 `realtime-color-palette-database.md`。
 
 ## 外链元数据结构
 
@@ -242,7 +243,7 @@ YouTube 辅助函数使用 `youtubei.js@17.0.1`、`Innertube.create()` 和 `getB
 - 打开详情时触发延迟的 Bilibili / YouTube 元数据获取
 - 在 `submissions` 上缓存获取结果或错误
 - 添加分类、标签和色调管理
-- 通过原子 RPC `public.approve_submission(...)` 发布到 `videos`
+- 通过原子色板 RPC 发布到 `videos`
 - 拒绝投稿
 
 ## 管理后台非目标

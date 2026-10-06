@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
-import { approveSubmission, rejectSubmission, retryMetadataFetch } from "@/app/dashboard/actions";
+import { rejectSubmission, retryMetadataFetch } from "@/app/dashboard/actions";
 import { Notice } from "@/components/dashboard/notice";
 import { PendingButton } from "@/components/dashboard/pending-button";
 import { StatusBadge } from "@/components/dashboard/status-badge";
-import { SubmissionCover } from "@/components/dashboard/submission-cover";
+import { CoverPreview } from "@/components/dashboard/cover-preview";
+import { SubmissionReviewForm } from "@/components/dashboard/submission-review-form";
 import { loadAdminPageData } from "@/lib/admin/auth";
 import {
   ensureSubmissionMetadata,
@@ -15,6 +17,8 @@ import {
   listAllDictionaries,
 } from "@/lib/review/queries";
 import type { SubmissionRow } from "@/lib/review/types";
+import { formatSubmissionDuration } from "@/lib/review/submission-list";
+import { getCosPreviewUrl } from "@/lib/storage/cos/preview";
 
 export const metadata = {
   title: "审核投稿",
@@ -54,6 +58,10 @@ export default async function SubmissionDetailPage({
   const isCos = isCosSubmission(submission);
   // Metadata may write to the database, so only start it after admin authorization.
   const metadataState = await ensureSubmissionMetadata(supabase, submission);
+  const title = metadataState.info?.title || submission.pending_title || "待获取投稿标题";
+  const watchUrl = getSubmissionWatchUrl(submission);
+  const cosCoverUrl = isCos ? getCosPreviewUrl(submission.cover_ref) : null;
+  const cosVideoUrl = isCos ? getCosPreviewUrl(submission.source_ref) : null;
   const canApprove =
     submission.status === "pending" &&
     (isExternal ? Boolean(metadataState.info) : isCos) &&
@@ -61,46 +69,66 @@ export default async function SubmissionDetailPage({
 
   return (
     <div className="space-y-5">
+      <Link className="inline-flex items-center gap-2 text-sm text-subtle hover:text-foreground" href="/dashboard/submissions" prefetch={false}><span aria-hidden="true">←</span> 返回审核队列</Link>
       <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-end">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.22em] text-subtle">审核</p>
-          <h1 className="mt-2 truncate text-2xl font-semibold tracking-normal">
-            {getSubmissionTitle(submission)}
+          <p className="text-xs uppercase tracking-[0.22em] text-subtle">投稿审核</p>
+          <h1 className="mt-2 break-words text-2xl font-semibold tracking-normal">
+            {title}
           </h1>
-          <p className="mt-2 truncate text-sm text-muted">{getSubmissionSubtitle(submission)}</p>
+          <p className="mt-2 text-sm text-subtle">{getSubmissionPlatformLabel(submission)} · 核对封面、视频内容和简介后完成审核</p>
         </div>
         <StatusBadge status={submission.status} />
       </div>
 
       <Notice error={error ?? metadataState.error ?? undefined} notice={notice} />
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="admin-card p-4">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="admin-card min-w-0 p-4">
           <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-subtle">元数据</p>
-              <h2 className="mt-2 text-lg font-semibold">
-                {isCos ? "待审信息" : `${getSubmissionPlatformLabel(submission)} 详情`}
-              </h2>
+              <h2 className="text-lg font-semibold">投稿内容</h2>
+              <p className="mt-1 text-xs text-subtle">检查封面与内容是否相符，以及内容是否适合发布。</p>
             </div>
             {isExternal && metadataState.error ? (
               <form action={retryMetadataFetch}>
                 <input name="submissionId" type="hidden" value={submission.id} />
                 <PendingButton className="admin-secondary-button" pendingText="重试中…">
-                  重试
+                  重新获取内容
                 </PendingButton>
               </form>
             ) : null}
           </div>
 
           {isCosSubmission(submission) ? (
-            <CosPendingDetails submission={submission} />
+            <>
+              <div className="mt-4">
+                {cosVideoUrl ? (
+                  <video aria-label="原创投稿视频预览" className="aspect-video w-full rounded-control border border-border bg-panel" controls playsInline poster={cosCoverUrl ?? undefined} preload="none" src={cosVideoUrl}>
+                    浏览器不支持视频预览，请打开视频查看。
+                  </video>
+                ) : <CoverPreview contain priority sizes="(max-width: 1023px) 100vw, 600px" src={cosCoverUrl} title={title} />}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {cosVideoUrl ? <a className="admin-secondary-button" href={cosVideoUrl} referrerPolicy="no-referrer" rel="noreferrer" target="_blank">打开视频 ↗</a> : null}
+                  {cosCoverUrl ? <a className="admin-secondary-button" href={cosCoverUrl} referrerPolicy="no-referrer" rel="noreferrer" target="_blank">查看完整封面 ↗</a> : null}
+                </div>
+                {!cosVideoUrl ? <p className="mt-3 text-sm text-amber-300">视频预览暂不可用，请核实上传文件。</p> : null}
+              </div>
+              <CosPendingDetails submission={submission} />
+            </>
           ) : metadataState.info ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
-              <SubmissionCover
+            <div className="mt-4 space-y-4">
+              <CoverPreview
+                contain
+                priority
+                sizes="(max-width: 1023px) 100vw, 600px"
                 src={metadataState.info.pic}
                 title={metadataState.info.title}
               />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs text-subtle">{formatSubmissionDuration(metadataState.info.duration) ? `视频时长 ${formatSubmissionDuration(metadataState.info.duration)}` : "封面预览"}</span>
+                {watchUrl ? <a className="admin-secondary-button" href={watchUrl} referrerPolicy="no-referrer" rel="noreferrer" target="_blank">查看原视频 ↗</a> : null}
+              </div>
               <div className="min-w-0 space-y-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.16em] text-subtle">标题</p>
@@ -118,63 +146,40 @@ export default async function SubmissionDetailPage({
                     </p>
                   </div>
                 </div>
-                <p className="line-clamp-5 text-sm leading-6 text-muted">{metadataState.info.desc}</p>
+                <div className="border-t border-border pt-3">
+                  <p className="mb-2 text-xs text-subtle">内容简介</p>
+                  <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-6 text-muted">{metadataState.info.desc || "投稿未提供简介。"}</p>
+                </div>
               </div>
             </div>
           ) : (
             <div className="mt-4 border border-border bg-panel p-4 text-sm text-muted">
-              元数据尚未缓存。
+              <p>暂时无法预览投稿内容，请重新获取后核实。</p>
+              {watchUrl ? <a className="admin-secondary-button mt-3" href={watchUrl} rel="noreferrer" target="_blank">查看原视频 ↗</a> : null}
             </div>
           )}
         </div>
 
-        <div className="space-y-4">
-          <form action={approveSubmission} className="space-y-4 admin-card p-4">
+        <div className="min-w-0 space-y-4">
+          {submission.status === "pending" ? <SubmissionReviewForm
+            canApprove={canApprove}
+            dictionaries={dictionaries}
+            disabledMessage={getApprovalDisabledMessage(submission, isExternal, isCos)}
+            isExternal={isExternal}
+            isPending={submission.status === "pending"}
+            key={submission.id}
+            submissionId={submission.id}
+          /> : null}
+
+          {submission.status === "pending" ? <form action={rejectSubmission} className="space-y-4 admin-card p-4">
             <input name="submissionId" type="hidden" value={submission.id} />
             <div className="border-b border-border pb-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-subtle">通过</p>
-              <h2 className="mt-2 text-lg font-semibold">发布到档案</h2>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-subtle">分类</span>
-              <select className="admin-input" disabled={!canApprove} name="categoryId" required>
-                <option value="">选择分类</option>
-                {dictionaries.categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <CheckboxGroup items={dictionaries.tags} label="标签，最多 4 个" name="tagIds" />
-            <ToneColorGroup items={dictionaries.tones} label="色调，最多 3 个" name="toneIds" />
-
-            <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-subtle">审核备注</span>
-              <textarea className="admin-input h-auto min-h-24 py-2" name="reviewNote" />
-            </label>
-
-            <PendingButton className="admin-button w-full" disabled={!canApprove} pendingText="发布中…">
-              通过审核
-            </PendingButton>
-            {!canApprove ? (
-              <p className="text-xs text-subtle">
-                {getApprovalDisabledMessage(submission, isExternal, isCos)}
-              </p>
-            ) : null}
-          </form>
-
-          <form action={rejectSubmission} className="space-y-4 admin-card p-4">
-            <input name="submissionId" type="hidden" value={submission.id} />
-            <div className="border-b border-border pb-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-subtle">拒绝</p>
-              <h2 className="mt-2 text-lg font-semibold">关闭投稿</h2>
+              <h2 className="text-lg font-semibold">不适合发布？</h2>
+              <p className="mt-1 text-xs text-subtle">填写原因，方便后续回看审核记录。</p>
             </div>
             <label className="block space-y-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-subtle">原因</span>
-              <textarea className="admin-input h-auto min-h-20 py-2" name="reviewNote" />
+              <span className="text-xs text-muted">拒绝原因</span>
+              <textarea className="admin-input h-auto min-h-20 py-2" name="reviewNote" placeholder="例如：内容与封面不符、内容不符合收录范围" />
             </label>
             <PendingButton
               className="admin-secondary-button w-full"
@@ -183,29 +188,23 @@ export default async function SubmissionDetailPage({
             >
               拒绝投稿
             </PendingButton>
-          </form>
+          </form> : (
+            <div className="admin-card p-4">
+              <h2 className="font-medium">审核记录</h2>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted">{submission.review_note || "本次审核未填写备注。"}</p>
+            </div>
+          )}
         </div>
       </section>
     </div>
   );
 }
 
-function getSubmissionTitle(submission: SubmissionRow) {
-  if (isCosSubmission(submission)) {
-    return submission.pending_title ?? submission.source_ref ?? submission.external_id;
-  }
-
-  return submission.external_id;
-}
-
-function getSubmissionSubtitle(submission: SubmissionRow) {
-  if (isCosSubmission(submission)) {
-    return submission.source_ref ? `原创 / 本地上传 / ${submission.source_ref}` : "原创 / 本地上传";
-  }
-
-  return `${getSubmissionPlatformLabel(submission)} / ${
-    submission.source_url ?? submission.external_id
-  }`;
+function getSubmissionWatchUrl(submission: SubmissionRow) {
+  const provider = getSubmissionStorageProvider(submission);
+  if (provider === "bilibili") { return `https://www.bilibili.com/video/${encodeURIComponent(submission.external_id)}`; }
+  if (provider === "youtube") { return `https://www.youtube.com/watch?v=${encodeURIComponent(submission.external_id)}`; }
+  return null;
 }
 
 function getApprovalDisabledMessage(
@@ -240,7 +239,7 @@ function getSubmissionPlatformLabel(submission: SubmissionRow) {
   }
 
   if (storageProvider === "cos") {
-    return "COS 原创";
+    return "原创上传";
   }
 
   return "未知来源";
@@ -255,18 +254,19 @@ function CosPendingDetails({ submission }: { submission: SubmissionRow }) {
       </div>
 
       <div className="grid gap-3 text-sm sm:grid-cols-2">
-        <DetailField label="来源" value="原创" />
-        <DetailField label="上传方式" value="本地上传" />
         <DetailField label="文件大小" value={formatFileSize(submission.file_size)} />
-        <DetailField label="MIME" value={submission.mime_type} />
       </div>
 
-      <div className="grid gap-3 text-sm">
-        <DetailField label="视频对象" value={submission.source_ref} breakAll />
-        <DetailField label="封面对象" value={submission.cover_ref} breakAll />
-        <DetailField label="视频 ETag" value={submission.source_etag} breakAll />
-        <DetailField label="封面 ETag" value={submission.cover_etag} breakAll />
-      </div>
+      <details className="rounded-control border border-border text-sm">
+        <summary className="cursor-pointer px-3 py-3 text-subtle hover:text-foreground">文件信息（排查问题时查看）</summary>
+        <div className="grid gap-3 border-t border-border p-3">
+          <DetailField label="文件类型" value={submission.mime_type} />
+          <DetailField label="视频对象" value={submission.source_ref} breakAll />
+          <DetailField label="封面对象" value={submission.cover_ref} breakAll />
+          <DetailField label="视频 ETag" value={submission.source_etag} breakAll />
+          <DetailField label="封面 ETag" value={submission.cover_etag} breakAll />
+        </div>
+      </details>
     </div>
   );
 }
@@ -325,82 +325,4 @@ function formatFileSize(value: number | string | null) {
   }
 
   return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function CheckboxGroup({
-  items,
-  label,
-  name,
-}: {
-  items: Array<{ id: string; name: string }>;
-  label: string;
-  name: string;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs uppercase tracking-[0.16em] text-subtle">{label}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {items.length ? (
-          items.map((item) => (
-            <label className="flex items-center gap-2 border border-border bg-panel px-3 py-2" key={item.id}>
-              <input className="h-4 w-4 accent-white" name={name} type="checkbox" value={item.id} />
-              <span className="text-sm text-muted">{item.name}</span>
-            </label>
-          ))
-        ) : (
-          <p className="text-sm text-muted">暂无条目。</p>
-        )}
-      </div>
-    </fieldset>
-  );
-}
-
-const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-function ToneColorGroup({
-  items,
-  label,
-  name,
-}: {
-  items: Array<{ color_hex?: string | null; family_name?: string | null; id: string; name: string }>;
-  label: string;
-  name: string;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs uppercase tracking-[0.16em] text-subtle">{label}</legend>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {items.length ? (
-          items.map((item) => (
-            <label
-              className="flex cursor-pointer flex-col items-center gap-2 border border-border bg-panel px-3 py-3 transition hover:border-muted"
-              key={item.id}
-            >
-              <input className="peer sr-only" name={name} type="checkbox" value={item.id} />
-              <span
-                aria-hidden="true"
-                className="h-12 w-12 rounded-full border border-borderStrong shadow-[0_0_0_4px_rgba(255,255,255,0.04)] transition peer-checked:scale-95 peer-checked:border-foreground peer-checked:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
-                style={{ backgroundColor: getToneColor(item) }}
-              />
-              <span className="max-w-full truncate text-center text-xs text-muted peer-checked:text-foreground">
-                {item.name}
-              </span>
-              {item.family_name ? (
-                <span className="max-w-full truncate text-center text-[0.68rem] text-subtle">
-                  {item.family_name}
-                </span>
-              ) : null}
-            </label>
-          ))
-        ) : (
-          <p className="text-sm text-muted">暂无条目。</p>
-        )}
-      </div>
-    </fieldset>
-  );
-}
-
-function getToneColor(item: { color_hex?: string | null; name: string }) {
-  const color = item.color_hex ?? item.name;
-  return HEX_COLOR_PATTERN.test(color) ? color : "#D4D4D4";
 }

@@ -70,7 +70,7 @@ function PageLink({
   }
 
   return (
-    <Link className="admin-secondary-button" href={href}>
+    <Link className="admin-secondary-button" href={href} prefetch={href.startsWith("/dashboard/submissions") ? false : undefined}>
       {children}
     </Link>
   );
