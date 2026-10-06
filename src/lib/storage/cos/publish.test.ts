@@ -163,3 +163,20 @@ describe("publishCosSubmission palette publication", () => {
     expect(deleteObject).not.toHaveBeenCalled();
   });
 });
+
+it("publishes QuickTime with a MOV key and the original content type", async () => {
+  const { input, dependencies, headObject, copyObject, rpc } = fixture();
+  input.submission = { ...submission, mime_type: "video/quicktime", source_ref: "submissions/original/video.mov" };
+  headObject.mockImplementation(async (_config, key) => ({
+    key, size: key === input.submission.source_ref ? 4096 : 512,
+    mimeType: key === input.submission.source_ref ? "video/quicktime" : "image/png",
+    etag: key === input.submission.source_ref ? "VIDEO-ETAG" : "COVER-ETAG",
+  }));
+  await expect(publishCosSubmission(input, dependencies)).resolves.toBe(videoId);
+  expect(copyObject).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    targetKey: "videos/" + videoId + "/video.mov", contentType: "video/quicktime",
+  }));
+  expect(rpc).toHaveBeenCalledWith("approve_cos_submission_with_palette", expect.objectContaining({
+    p_playback_ref: "videos/" + videoId + "/video.mov",
+  }));
+});
