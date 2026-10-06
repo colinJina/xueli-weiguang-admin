@@ -15,6 +15,7 @@ import { getCosServerConfig, type CosServerConfig } from "./config";
 const videoExtensions: Record<string, string> = {
   "video/mp4": "mp4",
   "video/webm": "webm",
+  "video/quicktime": "mov",
 };
 
 const coverExtensions: Record<string, string> = {
